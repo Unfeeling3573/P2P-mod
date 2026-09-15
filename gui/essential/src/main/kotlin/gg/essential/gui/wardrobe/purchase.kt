@@ -40,12 +40,12 @@ import org.slf4j.LoggerFactory
 import java.util.UUID
 import kotlin.collections.map
 
-fun WardrobeState.hasEnoughCoins(item: Item): Boolean {
-    return (item.getCost(this).get() ?: 0) <= coins.get()
+fun WardrobeState.hasEnoughCoins(item: Item): Boolean? {
+    return (item.getCost(this).getUntracked() ?: 0) <= (coins.getUntracked() ?: return null)
 }
 
-fun WardrobeState.hasEnoughCoins(items: Set<Item>): Boolean {
-    return getTotalCost(stateOf(items.toList()).toListState()).get() <= coins.get()
+fun WardrobeState.hasEnoughCoins(items: Set<Item>): Boolean? {
+    return getTotalCost(stateOf(items.toList()).toListState()).getUntracked() <= (coins.getUntracked() ?: return null)
 }
 
 fun WardrobeState.purchaseCosmeticOrEmote(item: Item.CosmeticOrEmote, callback: (success: Boolean) -> Unit) {
@@ -65,7 +65,7 @@ fun WardrobeState.purchaseAndCreateOutfitForBundle(
         callback(false)
         return
     }
-    if (!hasEnoughCoins(item)) {
+    if (hasEnoughCoins(item) != true) {
         callback(false)
         return
     }
@@ -75,6 +75,7 @@ fun WardrobeState.purchaseAndCreateOutfitForBundle(
             "Your outfit library is full!",
             "Delete an outfit to make space for purchasing this bundle."
         )
+        return
     }
 
     if (skinsManager.skins.get().size >= settings.skinsLimit.get()) {
@@ -82,6 +83,7 @@ fun WardrobeState.purchaseAndCreateOutfitForBundle(
             "Your skin library is full!",
             "Delete a skin to make space for purchasing this bundle."
         )
+        return
     }
 
     fun purchaseStateUpdateCallback(success: Boolean) {
@@ -156,7 +158,7 @@ private fun WardrobeState.purchaseCosmeticOrEmote(items: Set<Item.CosmeticOrEmot
     purchaseCosmeticOrEmote(items, giftTo) { success, _ -> callback(success) }
 
 private fun WardrobeState.purchaseCosmeticOrEmote(items: Set<Item.CosmeticOrEmote>, giftTo: UUID?, callback: (success: Boolean, errorCode: String?) -> Unit) {
-    if (!hasEnoughCoins(items)) {
+    if (hasEnoughCoins(items) != true) {
         callback(false, null)
         return
     }

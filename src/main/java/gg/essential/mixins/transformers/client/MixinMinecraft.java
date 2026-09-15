@@ -41,7 +41,7 @@ import java.util.Objects;
 
 import static gg.essential.util.HelpersKt.toUSession;
 
-//#if MC >= 26.3
+//#if MC >= 26.4
 //$$ import net.minecraft.client.multiplayer.p2p.P2PManager;
 //#endif
 
@@ -110,7 +110,7 @@ public abstract class MixinMinecraft implements MinecraftExt {
     @Shadow public abstract PropertyMap getProfileProperties();
     //#endif
 
-    //#if MC >= 26.3
+    //#if MC >= 26.4
     //$$ @Shadow @Mutable @Final public P2PManager p2pManager;
     //#endif
     //#if MC >= 26.2
@@ -238,7 +238,7 @@ public abstract class MixinMinecraft implements MinecraftExt {
         //#if MC >= 26.2
         //$$ this.remoteFriendListUpdateHandler.close();
         //#endif
-        //#if MC >= 26.3
+        //#if MC >= 26.4
         //$$ this.p2pManager.shutdown();
         //#endif
 
@@ -292,7 +292,7 @@ public abstract class MixinMinecraft implements MinecraftExt {
         //#endif
         //#endif
 
-        //#if MC >= 26.3
+        //#if MC >= 26.4
         //$$ this.p2pManager = new P2PManager((Minecraft) (Object) this, session);
         //#endif
 

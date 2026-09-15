@@ -15,6 +15,8 @@ object HttpStatus {
     // 2xx
     const val OK = 200
 
+    // 4xx
+    const val BAD_REQUEST = 400
     const val FORBIDDEN = 403
     const val NOT_FOUND = 404
 }

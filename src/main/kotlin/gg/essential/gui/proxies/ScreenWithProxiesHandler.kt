@@ -137,7 +137,7 @@ class ScreenWithProxiesHandler(
         private val mainMenuButtons = listOfNotNull(
             null,
             "invite_host" to 2,
-            "world_host" to 3,
+            null,
             "social" to 4,
             "wardrobe" to 5,
             "wardrobe_2" to 6,
@@ -159,7 +159,7 @@ class ScreenWithProxiesHandler(
 
         private val pauseMenuButtons = listOfNotNull(
             "invite_host" to 2,
-            "world_host" to 3,
+            null,
             "social" to 4,
             "wardrobe" to 5,
             "wardrobe_2" to 6,

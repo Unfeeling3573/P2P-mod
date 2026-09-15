@@ -11,42 +11,56 @@
  */
 package gg.essential.gui.common.effect
 
-import gg.essential.elementa.UIComponent
 import gg.essential.elementa.effects.Effect
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
 import gg.essential.gui.EssentialPalette
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
 import gg.essential.universal.render.URenderPipeline
-import gg.essential.universal.vertex.UBufferBuilder
+import gg.essential.universal.vertex.UVertexConsumer
 import java.awt.Color
+import kotlin.math.roundToInt
 
 class CheckerboardBackgroundEffect : Effect() {
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Use `extract` instead.",
+        replaceWith = ReplaceWith("extractBefore(extractor)")
+    )
     override fun beforeDraw(matrixStack: UMatrixStack) {
-        drawCheckerBoard(matrixStack, boundComponent)
-
+        extractBefore(ImmediateElementaExtractor(matrixStack))
     }
-    private fun drawCheckerBoard(matrixStack: UMatrixStack, component: UIComponent) {
-        val left = component.getLeft().toDouble()
-        val top = component.getTop().toDouble()
-        val right = component.getRight().toDouble()
-        val bottom = component.getBottom().toDouble()
-        val graphics = UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_COLOR)
 
-        for (x in 0 until (right - left).toInt()) {
-            for (y in 0 until (bottom - top).toInt()) {
+    override fun extractBefore(extractor: ElementaExtractor) {
+        val component = boundComponent
+        val scale = extractor.guiScale
+        val unit = scale.roundToInt()
+        val left = (component.getLeft().toDouble() * scale).roundToInt()
+        val top = (component.getTop().toDouble() * scale).roundToInt()
+        val right = (component.getRight().toDouble() * scale).roundToInt()
+        val bottom = (component.getBottom().toDouble() * scale).roundToInt()
+        val quads = (1 + (right - left) / unit) * (1 + (bottom - top) / unit)
+        extractor.custom(left, top, right, bottom, PIPELINE, emptyList(), quads * 4) { builder, _, _ ->
+            drawCheckerboard(builder, left, top, right, bottom, unit)
+        }
+    }
+
+    private fun drawCheckerboard(builder: UVertexConsumer, left: Int, top: Int, right: Int, bottom: Int, unit: Int) {
+        for (x in 0 until (right - left) / unit) {
+            for (y in 0 until (bottom - top) / unit) {
                 val color = if ((x + y) % 2 == 0) Color.LIGHT_GRAY else EssentialPalette.TEXT_HIGHLIGHT
-                drawVertex(graphics, matrixStack, left + x, top + y, color)
-                drawVertex(graphics, matrixStack, left + x, top + y + 1, color)
-                drawVertex(graphics, matrixStack, left + x + 1, top + y + 1, color)
-                drawVertex(graphics, matrixStack, left + x + 1, top + y, color)
+                val x2 = x + 1
+                val y2 = y + 1
+                drawVertex(builder, left + x  * unit, top + y  * unit, color)
+                drawVertex(builder, left + x  * unit, top + y2 * unit, color)
+                drawVertex(builder, left + x2 * unit, top + y2 * unit, color)
+                drawVertex(builder, left + x2 * unit, top + y  * unit, color)
             }
         }
-
-        graphics.build()?.drawAndClose(PIPELINE)
     }
-    private fun drawVertex(graphics: UBufferBuilder, matrixStack: UMatrixStack, x: Double, y: Double, color: Color) {
-        graphics
-            .pos(matrixStack, x, y, 0.0)
+    private fun drawVertex(builder: UVertexConsumer, x: Int, y: Int, color: Color) {
+        builder
+            .pos(UMatrixStack.UNIT, x.toDouble(), y.toDouble(), 0.0)
             .color(
                 color.red.toFloat() / 255f,
                 color.green.toFloat() / 255f,

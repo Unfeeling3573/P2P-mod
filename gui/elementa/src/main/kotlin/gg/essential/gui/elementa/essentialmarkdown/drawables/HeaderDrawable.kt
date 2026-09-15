@@ -12,6 +12,8 @@
 package gg.essential.gui.elementa.essentialmarkdown.drawables
 
 import gg.essential.elementa.components.UIBlock
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.fillMcScaleXYWH
 import gg.essential.gui.elementa.essentialmarkdown.DrawState
 import gg.essential.gui.elementa.essentialmarkdown.EssentialMarkdown
 import gg.essential.universal.UMatrixStack
@@ -63,6 +65,7 @@ class HeaderDrawable(
         )
     }
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
     override fun draw(matrixStack: UMatrixStack, state: DrawState) {
         paragraph.drawCompat(matrixStack, state)
 
@@ -75,6 +78,21 @@ class HeaderDrawable(
                 (y + state.yShift).toDouble(),
                 dividerWidth ?: width.toDouble(),
                 headerConfig.dividerWidth.toDouble()
+            )
+        }
+    }
+
+    override fun extract(extractor: ElementaExtractor, state: DrawState) {
+        paragraph.extract(extractor, state)
+
+        if (headerConfig.hasDivider) {
+            val y = layout.bottom - layout.margin.bottom - headerConfig.dividerWidth
+            extractor.fillMcScaleXYWH(
+                x + state.xShift,
+                y + state.yShift,
+                dividerWidth?.toFloat() ?: width,
+                headerConfig.dividerWidth,
+                headerConfig.dividerColor,
             )
         }
     }

@@ -15,6 +15,10 @@ import gg.essential.elementa.components.UIBlock
 import gg.essential.elementa.components.UIRoundedRectangle
 import gg.essential.elementa.dsl.*
 import gg.essential.elementa.font.FontProvider
+import gg.essential.elementa.font.extractMcScale
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
+import gg.essential.elementa.renderer.fillMcScaleXYWH
 import gg.essential.gui.elementa.essentialmarkdown.DrawState
 import gg.essential.gui.elementa.essentialmarkdown.EssentialMarkdown
 import gg.essential.gui.elementa.essentialmarkdown.HeaderLevelConfig
@@ -194,7 +198,12 @@ class TextDrawable(
         } else false
     }
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
     override fun draw(matrixStack: UMatrixStack, state: DrawState) {
+        extract(ImmediateElementaExtractor(matrixStack), state)
+    }
+
+    override fun extract(extractor: ElementaExtractor, state: DrawState) {
         val hovered = isHovered || (linkedTexts?.isHovered() ?: false)
 
         if (style.isCode) {
@@ -204,8 +213,8 @@ class TextDrawable(
             val y2 = y1 + height + config.inlineCodeConfig.verticalPadding * 2 - 1f
             val outlineWidth = config.inlineCodeConfig.outlineWidth
 
-            UIRoundedRectangle.drawRoundedRectangle(
-                matrixStack,
+            UIRoundedRectangle.extractRoundedRectangle(
+                extractor,
                 x1,
                 y1,
                 x2,
@@ -214,8 +223,8 @@ class TextDrawable(
                 config.inlineCodeConfig.outlineColor
             )
 
-            UIRoundedRectangle.drawRoundedRectangle(
-                matrixStack,
+            UIRoundedRectangle.extractRoundedRectangle(
+                extractor,
                 x1 + outlineWidth,
                 y1 + outlineWidth,
                 x2 - outlineWidth,
@@ -229,21 +238,20 @@ class TextDrawable(
         val yShift = state.yShift + if (style.isCode) config.inlineCodeConfig.verticalPadding else 0f
 
         texts.forEach {
-            matrixStack.scale(scaleModifier, scaleModifier, 1f)
-            drawString(
-                matrixStack,
+            extractString(
+                extractor,
                 config,
                 md.getFontProvider(),
                 it.string,
-                (it.x + xShift) / scaleModifier,
-                (it.y + yShift) / scaleModifier,
+                it.x + xShift,
+                it.y + yShift,
+                scaleModifier,
                 it.selected,
                 style.linkLocation != null,
                 hovered,
                 style.color,
                 headerConfig
             )
-            matrixStack.scale(1f / scaleModifier, 1f / scaleModifier, 1f)
         }
     }
 
@@ -448,6 +456,86 @@ class TextDrawable(
                     y.toDouble() + 8,
                     string.width().toDouble(),
                     1.0
+                )
+            }
+        }
+
+        fun extractString(
+            extractor: ElementaExtractor,
+            config: MarkdownConfig,
+            fontProvider: FontProvider,
+            string: String,
+            x: Float,
+            y: Float,
+            scale: Float,
+            selected: Boolean = false,
+            isLink: Boolean = false,
+            isHovered: Boolean = false,
+            color: Color? = null,
+            headerConfig: HeaderLevelConfig? = null
+        ) {
+            if (selected) {
+                extractor.fillMcScaleXYWH(
+                    x,
+                    y,
+                    string.width(scale, fontProvider),
+                    9f * scale,
+                    config.textConfig.selectionBackgroundColor,
+                )
+            }
+
+            val foregroundColor = when {
+                isLink && isHovered -> config.urlConfig.fontColorOnHover.rgb
+                isLink -> config.urlConfig.fontColor.rgb
+                selected -> config.textConfig.selectionForegroundColor.rgb
+                headerConfig != null -> headerConfig.fontColor.rgb
+                color != null -> color.rgb
+                else -> config.textConfig.color.rgb
+            }
+
+            if (config.textConfig.hasShadow) {
+                fontProvider.extractMcScale(
+                    extractor,
+                    string,
+                    Color(foregroundColor),
+                    x,
+                    y,
+                    scale,
+                    true,
+                    Color(config.textConfig.shadowColor.rgb)
+                )
+            } else {
+                fontProvider.extractMcScale(
+                    extractor,
+                    string,
+                    Color(foregroundColor),
+                    x,
+                    y,
+                    scale,
+                    false
+                )
+            }
+
+            // Underline if link is:
+            // - not hovered and 'underline' is true
+            // - hovered and 'underlineOnHover' is true
+            if (isLink && ((!isHovered && config.urlConfig.underline) || (isHovered && config.urlConfig.underlineOnHover))) {
+                val width = string.width(scale, fontProvider)
+                if (config.textConfig.hasShadow) {
+                    extractor.fillMcScaleXYWH(
+                        x + 1 * scale,
+                        y + 9 * scale,
+                        width,
+                        1 * scale,
+                        config.textConfig.shadowColor,
+                    )
+                }
+                extractor.fillMcScaleXYWH(
+                    x,
+                    y + 8 * scale,
+                    width,
+                    1 * scale,
+                    if (isHovered) config.urlConfig.fontColorOnHover else config.urlConfig.fontColor,
                 )
             }
         }

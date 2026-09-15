@@ -12,6 +12,7 @@
 package gg.essential.gui.elementa.essentialmarkdown.drawables
 
 import gg.essential.elementa.dsl.width
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.elementa.essentialmarkdown.DrawState
 import gg.essential.gui.elementa.essentialmarkdown.EssentialMarkdown
 import gg.essential.universal.UMatrixStack
@@ -130,8 +131,13 @@ class ListDrawable(
         )
     }
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
     override fun draw(matrixStack: UMatrixStack, state: DrawState) {
         listItems.forEach { it.drawCompat(matrixStack, state) }
+    }
+
+    override fun extract(extractor: ElementaExtractor, state: DrawState) {
+        listItems.forEach { it.extract(extractor, state) }
     }
 
     override fun cursorAt(mouseX: Float, mouseY: Float, dragged: Boolean, mouseButton: Int) = drawables.cursorAt(mouseX, mouseY, dragged, mouseButton)
@@ -175,6 +181,7 @@ class ListDrawable(
             return Layout(x, y, width, drawable.height)
         }
 
+        @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
         override fun draw(matrixStack: UMatrixStack, state: DrawState) {
             val newX = x + symbolWidth - actualSymbolWidth
             if (drawable !is ListDrawable)
@@ -187,6 +194,21 @@ class ListDrawable(
                     y + state.yShift
                 )
             drawable.drawCompat(matrixStack, state)
+        }
+
+        override fun extract(extractor: ElementaExtractor, state: DrawState) {
+            val newX = x + symbolWidth - actualSymbolWidth
+            if (drawable !is ListDrawable)
+                TextDrawable.extractString(
+                    extractor,
+                    config,
+                    md.getFontProvider(),
+                    symbol,
+                    newX + state.xShift,
+                    y + state.yShift,
+                    1f,
+                )
+            drawable.extract(extractor, state)
         }
 
         override fun cursorAt(mouseX: Float, mouseY: Float, dragged: Boolean, mouseButton: Int) =

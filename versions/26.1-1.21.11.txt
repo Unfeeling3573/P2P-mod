@@ -1,4 +1,5 @@
 com.mojang.blaze3d.platform.WindowEventHandler resizeGui() onResolutionChanged()
+com.mojang.blaze3d.systems.SamplerCache getSampler() get()
 net.minecraft.client.renderer.GameRenderer lambda$takeAutoScreenshot$1() method_3181()
 net.minecraft.client.renderer.LevelRenderer getLightCoords() getLightmapCoordinates()
 net.minecraft.client.renderer.entity.layers.RenderLayer submit() render()

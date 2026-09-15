@@ -13,7 +13,6 @@ package gg.essential.util.image.bitmap
 
 import gg.essential.gui.elementa.state.v2.State
 import gg.essential.gui.elementa.state.v2.combinators.map
-import gg.essential.gui.elementa.state.v2.combinators.zip
 import gg.essential.gui.elementa.state.v2.mutableStateOf
 import gg.essential.universal.UImage
 import gg.essential.universal.utils.ReleasedDynamicTexture
@@ -37,13 +36,6 @@ private val resourceReloadState = mutableStateOf(0).apply {
  * This is updated whenever the user changes their resource pack.
  */
 fun UIdentifier.bitmapState(): State<MutableBitmap?> = resourceReloadState.map { Bitmap.from(this) }
-
-/**
- * Returns a [MutableBitmap] derived from this [UIdentifier], only if [flag] is set.
- */
-fun UIdentifier.bitmapStateIf(flag: State<Boolean>) = resourceReloadState.zip(flag).map { (_, flag) ->
-    if (flag) Bitmap.from(this) else null
-}
 
 fun Bitmap.Companion.from(location: UIdentifier): MutableBitmap? {
     return try {

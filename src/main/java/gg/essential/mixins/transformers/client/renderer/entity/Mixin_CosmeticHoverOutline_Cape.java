@@ -14,7 +14,7 @@ package gg.essential.mixins.transformers.client.renderer.entity;
 import gg.essential.cosmetics.CosmeticsRenderState;
 import gg.essential.cosmetics.CosmeticsState;
 import gg.essential.cosmetics.EquippedCosmetic;
-import gg.essential.gui.common.CosmeticHoverOutlineEffect;
+import gg.essential.gui.common.CosmeticHoverOutlineHook;
 import gg.essential.mod.cosmetics.CosmeticSlot;
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.renderer.entity.layers.LayerCape;
@@ -93,7 +93,7 @@ public abstract class Mixin_CosmeticHoverOutline_Cape
         //#endif
         CallbackInfo ci
     ) {
-        CosmeticHoverOutlineEffect outlineEffect = CosmeticHoverOutlineEffect.Companion.getActive();
+        CosmeticHoverOutlineHook outlineEffect = CosmeticHoverOutlineHook.Companion.getActive();
         if (outlineEffect == null) {
             return;
         }

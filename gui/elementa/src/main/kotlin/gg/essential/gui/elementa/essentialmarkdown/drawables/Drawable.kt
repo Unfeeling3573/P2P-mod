@@ -11,6 +11,7 @@
  */
 package gg.essential.gui.elementa.essentialmarkdown.drawables
 
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.elementa.essentialmarkdown.DrawState
 import gg.essential.gui.elementa.essentialmarkdown.EssentialMarkdown
 import gg.essential.gui.elementa.essentialmarkdown.MarkdownConfig
@@ -78,12 +79,17 @@ abstract class Drawable(val md: EssentialMarkdown) {
     protected abstract fun layoutImpl(x: Float, y: Float, width: Float): Layout
 
     @Deprecated(UMatrixStack.Compat.DEPRECATED, ReplaceWith("draw(matrixStack, state)"))
+    @Suppress("DEPRECATION")
     open fun draw(state: DrawState) = draw(UMatrixStack.Compat.get(), state)
 
     @Suppress("DEPRECATION")
     fun drawCompat(matrixStack: UMatrixStack, state: DrawState) = UMatrixStack.Compat.runLegacyMethod(matrixStack) { draw(state) }
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
     open fun draw(matrixStack: UMatrixStack, state: DrawState) {
+    }
+
+    open fun extract(extractor: ElementaExtractor, state: DrawState) {
     }
 
     fun isHovered(mouseX: Float, mouseY: Float): Boolean {

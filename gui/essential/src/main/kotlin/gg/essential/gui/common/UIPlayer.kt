@@ -18,4 +18,8 @@ abstract class UIPlayer : UIComponent() {
     abstract val wearablesManager: WearablesManager?
 
     abstract fun close()
+
+    abstract fun extractRenderState(): RenderState
+
+    interface RenderState
 }

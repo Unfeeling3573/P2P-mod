@@ -26,21 +26,7 @@ import org.lwjgl.BufferUtils
 import org.lwjgl.opengl.GL11
 //#endif
 
-//#if MC<=11202
-import org.lwjgl.opengl.GLContext
-//#else
-//$$ import org.lwjgl.opengl.GL
-//#endif
-
 object GLUtil {
-
-    val isGL30: Lazy<Boolean> = lazy {
-        //#if MC<=11202
-        GLContext.getCapabilities().OpenGL30
-        //#else
-        //$$ GL.getCapabilities().OpenGL30
-        //#endif
-    }
 
     //#if MC>=11600
     //$$ fun glGetMatrix(stack: MatrixStack, scale: Float): MutableMat4 {

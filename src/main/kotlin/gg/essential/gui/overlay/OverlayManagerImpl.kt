@@ -19,6 +19,8 @@ import gg.essential.elementa.components.UIContainer
 import gg.essential.elementa.components.Window
 import gg.essential.elementa.events.UIClickEvent
 import gg.essential.elementa.events.UIScrollEvent
+import gg.essential.elementa.renderer.ElementaRenderState
+import gg.essential.elementa.renderer.ElementaRenderer
 import gg.essential.event.gui.GuiClickEvent
 import gg.essential.event.gui.GuiDrawScreenEvent
 import gg.essential.event.gui.GuiKeyTypedEvent
@@ -26,18 +28,26 @@ import gg.essential.event.gui.GuiMouseReleaseEvent
 import gg.essential.event.gui.MouseScrollEvent
 import gg.essential.event.render.RenderTickEvent
 import gg.essential.mixins.impl.client.gui.EssentialScreenMayAllowPlayerInput
+import gg.essential.universal.UGraphics
 import gg.essential.universal.UKeyboard
-import gg.essential.universal.UMatrixStack
 import gg.essential.universal.UMouse
 import gg.essential.universal.UResolution
 import gg.essential.universal.UScreen
+import gg.essential.universal.render.UGpuDevice
+import gg.essential.universal.render.UGpuFormat
+import gg.essential.universal.render.UGpuSampler
+import gg.essential.universal.render.UGpuTexture
+import gg.essential.universal.render.UGpuTextureView
+import gg.essential.util.McElementaExtractor
 import gg.essential.util.UDrawContext
 import gg.essential.util.isSorted
+import gg.essential.util.NEAREST
 import me.kbrewster.eventbus.Subscribe
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiScreen
 import org.slf4j.LoggerFactory
 import kotlin.math.max
+import java.awt.Color
 
 //#if MC >= 26.2
 //$$ import net.minecraft.client.gui.screens.friends.FriendsOverlayScreen
@@ -46,10 +56,6 @@ import kotlin.math.max
 //#if MC>=12109
 //$$ import net.minecraft.client.gui.Click
 //$$ import net.minecraft.client.input.MouseInput
-//#endif
-
-//#if MC>=12106
-//$$ import gg.essential.util.AdvancedDrawContext
 //#endif
 
 //#if MC>=11600
@@ -74,7 +80,7 @@ object OverlayManagerImpl : OverlayManager {
     private var focus: Pair<Layer, UIComponent>? = null
 
     override fun createLayer(priority: LayerPriority): Layer {
-        return LayerImpl(priority)
+        return LayerImpl(OverlayManager.ELEMENTA_VERSION, priority)
     }
 
     override fun addLayer(layer: Layer) {
@@ -91,10 +97,18 @@ object OverlayManagerImpl : OverlayManager {
     }
 
     override fun removeLayer(layer: Layer) {
+        layer as LayerImpl
 
         layers.remove(layer)
         layersAndSpecials.remove(LayerOrSpecial.Layer(layer))
         clickedLayers.removeIf { (it.first as? LayerOrSpecial.Layer)?.layer == layer }
+
+        if (focus?.first == layer) {
+            focus = null
+            UKeyboard.stopTextInput()
+        }
+
+        layer.removed()
     }
 
     /**
@@ -126,10 +140,22 @@ object OverlayManagerImpl : OverlayManager {
     }
 
     /**
+     * Returns true if any modals are open.
+     */
+    fun hasOpenModals() = layers.any { it.priority == LayerPriority.Modal }
+
+    /**
      * Disposes of any layers with a Window where [Window.hasErrored] is set to true.
      */
     private fun cleanupLayers() {
-        layers.removeIf { it.window.hasErrored }
+        layers.removeIf { layer ->
+            if (layer.window.hasErrored) {
+                layer.removed()
+                true
+            } else {
+                false
+            }
+        }
     }
 
     /**
@@ -253,33 +279,24 @@ object OverlayManagerImpl : OverlayManager {
         val hideGui = mc.gameSettings.hideGUI && UScreen.currentScreen == null
         //#endif
 
-        fun drawLayer(matrixStack: UMatrixStack, layer: Layer) {
-            val layerMatrixStack =
-                if (hideGui && layer.respectsHideGuiSetting || !layer.rendered) {
-                    matrixStack.fork().also {
-                        it.translate(FAKE_MOUSE_POS, FAKE_MOUSE_POS, 0.0)
-                    }
-                } else {
-                    matrixStack
-                }
-
-            if (LayerOrSpecial.Layer(layer) in layersWithTrueMousePos) {
-                layer.window.draw(layerMatrixStack)
-            } else {
-                withFakeMousePos {
-                    layer.window.draw(layerMatrixStack)
-                }
-            }
-        }
-
         for (layer in layers.filter { it.priority in priority }) {
-            //#if MC>=12106
-            //$$ AdvancedDrawContext.drawImmediate(drawContext.mc) { matrixStack ->
-            //$$     drawLayer(matrixStack, layer)
-            //$$ }
-            //#else
-            drawLayer(drawContext.matrixStack, layer)
-            //#endif
+            val renderState =
+                if (LayerOrSpecial.Layer(layer) in layersWithTrueMousePos) {
+                    layer.window.prepareFrame()
+                    layer.window.extractRenderState()
+                } else {
+                    withFakeMousePos {
+                        layer.window.prepareFrame()
+                        layer.window.extractRenderState()
+                    }
+                }
+
+            if (hideGui && layer.respectsHideGuiSetting || !layer.rendered) {
+                continue
+            }
+
+            // FIXME rendering needs to be delayed until on the render thread once that's a thing
+            layer.renderer().render(drawContext, renderState)
         }
 
         propagateFocus()
@@ -332,7 +349,9 @@ object OverlayManagerImpl : OverlayManager {
                 Events.ignoreMouseReleaseEvent = true
                 try {
                     val screen = layer.screen
-                    //#if MC>=12109
+                    //#if MC >= 26.3
+                    //$$ screen.mouseReleased(MouseButtonEvent(UMouse.Scaled.x, UMouse.Scaled.y, MouseButtonInfo(UMouse.buttonGlfwToSdl(button), 0)))
+                    //#elseif MC>=12109
                     //$$ screen?.mouseReleased(Click(UMouse.Scaled.x, UMouse.Scaled.y, MouseInput(button, 0)))
                     //#elseif MC>=11600
                     //$$ screen?.mouseReleased(UMouse.Scaled.x, UMouse.Scaled.y, button)
@@ -396,12 +415,15 @@ object OverlayManagerImpl : OverlayManager {
         }
     }
 
-    private inline fun withFakeMousePos(block: () -> Unit) {
+    private inline fun <T> withFakeMousePos(block: () -> T): T {
         val orgX = UMouse.Raw.x
         val orgY = UMouse.Raw.y
         GlobalMouseOverride.set(FAKE_MOUSE_POS, FAKE_MOUSE_POS)
-        block()
-        GlobalMouseOverride.set(orgX, orgY)
+        try {
+            return block()
+        } finally {
+            GlobalMouseOverride.set(orgX, orgY)
+        }
     }
 
     /**
@@ -731,7 +753,10 @@ object OverlayManagerImpl : OverlayManager {
         )
     }
 
-    private class LayerImpl(override val priority: LayerPriority) : Layer {
+    private class LayerImpl(
+        elementaVersion: ElementaVersion,
+        override val priority: LayerPriority
+    ) : Layer {
         override val window: Window = Window(ElementaVersion.V10)
         override var rendered: Boolean = true
         override var respectsHideGuiSetting: Boolean = true
@@ -743,6 +768,17 @@ object OverlayManagerImpl : OverlayManager {
         var passThroughEvent = false
         init {
             window.onKeyType { _, _ -> passThroughEvent = true }
+        }
+
+        // Initialized on demand
+        // (and only while the layer is registered, so we can then `close` it when the layer is unregistered)
+        var renderer: LayerRenderer? = null
+        fun renderer(): LayerRenderer =
+            renderer ?: LayerRenderer().also { renderer = it }
+
+        fun removed() {
+            renderer?.close()
+            renderer = null
         }
     }
 
@@ -805,6 +841,38 @@ object OverlayManagerImpl : OverlayManager {
             }
             super.onTick()
         }
+
+        override fun uCreateRenderer(): UScreen.Renderer {
+            return Renderer(UGraphics.getDevice())
+        }
+
+        override fun uExtractRenderState(mouseX: Int, mouseY: Int, partialTicks: Float): RenderState {
+            return object : RenderState {
+                override val background: Boolean
+                    get() = false
+            }
+        }
+
+        private class Renderer(device: UGpuDevice) : UScreen.Renderer {
+            private val texture = device.createTexture(
+                null,
+                UGpuTexture.Usage.COPY_DST + UGpuTexture.Usage.RENDER_ATTACHMENT + UGpuTexture.Usage.TEXTURE_BINDING,
+                UGpuFormat.DEFAULT_RGBA,
+                1,
+                1,
+            )
+            private val textureView = device.createTextureView(texture)
+            init {
+                device.clearColor(texture, 0f, 0f, 0f, 0f)
+            }
+
+            override fun render(state: RenderState): UGpuTextureView = textureView
+
+            override fun close() {
+                textureView.close()
+                texture.close()
+            }
+        }
     }
 
     private object GlobalMouseOverride {
@@ -831,5 +899,74 @@ object OverlayManagerImpl : OverlayManager {
             eventYField.invokeExact(trueY)
         }
         //#endif
+    }
+}
+
+private class LayerRenderer : AutoCloseable {
+    private val elementaRenderer = ElementaRenderer()
+
+    private var lastWidth = 0
+    private var lastHeight = 0
+    private var lastTextureView: UGpuTextureView? = null
+
+    fun render(uDrawContext: UDrawContext, state: ElementaRenderState) {
+        val x1 = state.boundsX1
+        val x2 = state.boundsX2
+        val y1 = state.boundsY1
+        val y2 = state.boundsY2
+        val width = x2 - x1
+        val height = y2 - y1
+
+        if (lastWidth != width || lastHeight != height) {
+            lastWidth = width
+            lastHeight = height
+            lastTextureView?.texture?.close()
+            lastTextureView?.close()
+            lastTextureView = null
+        }
+
+        if (width == 0 || height == 0) {
+            return
+        }
+
+        val textureView = lastTextureView ?: run {
+            val device = UGraphics.getDevice()
+            val texture = device.createTexture(
+                null,
+                UGpuTexture.Usage.TEXTURE_BINDING + UGpuTexture.Usage.RENDER_ATTACHMENT,
+                UGpuFormat.DEFAULT_RGBA,
+                width,
+                height,
+                1,
+            )
+            device.createTextureView(texture, 0, 1)
+        }.also { lastTextureView = it }
+
+        elementaRenderer.renderToTexture(
+            textureView,
+            0, 0,
+            x1, y1,
+            width, height,
+            state,
+        )
+
+        val mcExtractor = McElementaExtractor(uDrawContext)
+        mcExtractor.blit(
+            x1, y1, x2, y2,
+            0f, 1f, 1f, 0f,
+            textureView, UGpuSampler.NEAREST,
+            textureContentImmutable = false,
+            premultipliedAlpha = true,
+            Color.WHITE,
+        )
+        mcExtractor.close()
+    }
+
+    override fun close() {
+        lastTextureView?.texture?.close()
+        lastTextureView?.close()
+        lastTextureView = null
+
+        elementaRenderer.close()
     }
 }

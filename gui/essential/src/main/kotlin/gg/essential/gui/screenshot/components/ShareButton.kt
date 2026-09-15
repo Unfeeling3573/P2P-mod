@@ -83,11 +83,8 @@ class ShareButton(
                         val future = CompletableFuture<Unit>()
 
                         launchModalFlow(platform.createModalManager()) {
-                            try {
-                                shareScreenshotModal(LocalScreenshot(file.toPath()), metadata)
-                            } finally {
-                                future.complete(Unit)
-                            }
+                            shareScreenshotModal(LocalScreenshot(file.toPath()), metadata)
+                                .whenCompleteAsync({ _, _ -> future.complete(Unit) }, Dispatchers.Client.asExecutor())
                         }
 
                         return@checkForUnsavedEditsAndRun future

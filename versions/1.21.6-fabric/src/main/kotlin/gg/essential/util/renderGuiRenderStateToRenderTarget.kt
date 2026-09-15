@@ -13,12 +13,9 @@ package gg.essential.util
 
 import com.mojang.blaze3d.systems.RenderSystem
 import gg.essential.universal.UGraphics
-import gg.essential.universal.UMatrixStack
-import gg.essential.universal.UResolution
-import gg.essential.universal.render.UGpuSampler
+import gg.essential.universal.render.UGpuTextureView
 import gg.essential.universal.render.URenderPipeline
 import gg.essential.universal.shader.BlendState
-import gg.essential.universal.vertex.UBufferBuilder
 import gg.essential.util.GuiEssentialPlatform.Companion.platform
 import gg.essential.util.image.GpuTexture
 import net.minecraft.client.MinecraftClient
@@ -35,32 +32,28 @@ private val COMPOSITE_PIPELINE = URenderPipeline.builderWithDefaultShader(
 }.build()
 
 /**
- * Renders the given [GuiRenderState] to the render target.
- *
- * Most of the implementation is dealing with the fact that MC's gui renderer always renders to MC's framebuffer and
- * doesn't respect [RenderSystem.outputColorTextureOverride].
+ * Renders the given [GuiRenderState] to a [GpuTexture].
  */
-fun renderGuiRenderStateToRenderTarget(matrixStack: UMatrixStack, guiRenderState: GuiRenderState) {
-    val resultColor = renderGuiRenderStateToTexture(guiRenderState)
-    blitTextureToRenderTarget(matrixStack, resultColor)
-    resultColor.close()
+fun renderGuiRenderStateToTexture(guiRenderState: GuiRenderState): GpuTexture {
+    val mcColor = platform.mcFrameBufferColorTexture
+    val resultColor = platform.newGpuTexture(mcColor.width, mcColor.height, GpuTexture.Format.RGBA8)
+    renderGuiRenderStateToTexture(guiRenderState, resultColor.ucView)
+    return resultColor
 }
 
 /**
- * Renders the given [GuiRenderState] to a [GpuTexture].
+ * Renders the given [GuiRenderState] to a [UGpuTextureView].
  *
  * Most of the implementation is dealing with the fact that MC's gui renderer always renders to MC's framebuffer and
  * doesn't respect [RenderSystem.outputColorTextureOverride].
  */
-fun renderGuiRenderStateToTexture(guiRenderState: GuiRenderState): GpuTexture {
+fun renderGuiRenderStateToTexture(guiRenderState: GuiRenderState, resultColor: UGpuTextureView) {
     val mc = MinecraftClient.getInstance()
     val mcColor = platform.mcFrameBufferColorTexture
     val mcDepth = platform.mcFrameBufferDepthTexture!!
 
     val width = mcColor.width
     val height = mcColor.height
-
-    val resultColor = platform.newGpuTexture(width, height, GpuTexture.Format.RGBA8)
 
     // Backup framebuffer
     val orgColor = platform.newGpuTexture(width, height, GpuTexture.Format.RGBA8)
@@ -112,33 +105,14 @@ fun renderGuiRenderStateToTexture(guiRenderState: GuiRenderState): GpuTexture {
     RenderSystem.setShaderFog(orgShaderFog)
 
     // Copy framebuffer to texture
-    resultColor.copyFrom(mcColor)
+    platform.wrapGpuTexture(GpuTexture.Format.RGBA8, resultColor)
+        .copyFrom(mcColor)
 
     // Restore framebuffer
     mcColor.copyFrom(orgColor)
     mcDepth.copyFrom(orgDepth)
     orgColor.close()
     orgDepth.close()
-
-    return resultColor
-}
-
-private fun blitTextureToRenderTarget(
-    matrixStack: UMatrixStack,
-    resultColor: GpuTexture
-) {
-    // Draw texture to render target
-    val scale = 1 / UResolution.scaleFactor
-    val w = resultColor.width * scale
-    val h = resultColor.height * scale
-    val buffer = UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_TEXTURE)
-    buffer.pos(matrixStack, 0.0, h, 0.0).tex(0.0, 0.0).endVertex()
-    buffer.pos(matrixStack, w, h, 0.0).tex(1.0, 0.0).endVertex()
-    buffer.pos(matrixStack, w, 0.0, 0.0).tex(1.0, 1.0).endVertex()
-    buffer.pos(matrixStack, 0.0, 0.0, 0.0).tex(0.0, 1.0).endVertex()
-    buffer.build()?.drawAndClose(COMPOSITE_PIPELINE) {
-        texture(0, resultColor.ucView, UGpuSampler.NEAREST)
-    }
 }
 
 object GuiRendererInfo {

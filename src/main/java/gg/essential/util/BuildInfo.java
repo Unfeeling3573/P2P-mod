@@ -63,6 +63,8 @@ public class BuildInfo {
         //$$ 26_01_00;
         //#elseif MC == 26.2
         //$$ 26_02_00;
+        //#elseif MC == 26.3
+        //$$ 26_03_00;
         //#else
         //$$ ADD_CASE_FOR_NEW_VERSION_TO_ABOVE_LIST;
         //#endif

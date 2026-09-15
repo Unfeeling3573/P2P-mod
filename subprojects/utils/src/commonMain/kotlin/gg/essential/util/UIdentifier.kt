@@ -28,6 +28,24 @@ data class UIdentifier(val namespace: String, val path: String) {
         return if (namespace.isNotEmpty()) "$namespace:$path" else path
     }
 
+    fun toTranslationKey(prefix: String = "", suffix: String = ""): String {
+        return buildString {
+            if (prefix.isNotEmpty()) {
+                append(prefix)
+                append('.')
+            }
+            if (namespace.isNotEmpty()) {
+                append(namespace)
+                append('.')
+            }
+            append(path)
+            if (suffix.isNotEmpty()) {
+                append('.')
+                append(suffix)
+            }
+        }
+    }
+
     companion object {
         @JvmStatic
         fun of(str: String): UIdentifier {

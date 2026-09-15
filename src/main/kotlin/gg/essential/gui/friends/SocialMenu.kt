@@ -239,7 +239,7 @@ class SocialMenu : InternalEssentialGUI(
         }
 
         UUIDUtil.getName(user).thenAcceptOnMainThread {
-            val isSps = connectionManager.spsManager.remoteSessions.any { it.hostUUID == user }
+            val isSps = Essential.getInstance().worldsManager.remoteSpsSessions.getUntracked().any { it.hostUUID == user }
             GuiUtil.pushModal { manager ->
                 ConfirmJoinModal(manager, it, isSps).onPrimaryAction {
                     if (!socialMenuState.activity.joinSession(user)) {
@@ -252,10 +252,16 @@ class SocialMenu : InternalEssentialGUI(
 
     override fun invitePlayers(users: Set<UUID>, name: String) {
         val currentServerData = UMinecraft.getMinecraft().currentServerData
-
-        val spsManager = connectionManager.spsManager
-        if (spsManager.localSession != null) {
-            spsManager.reinviteUsers(users)
+        val worldsManager = Essential.getInstance().worldsManager
+        val worldManager = worldsManager.integratedServerWorld.getUntracked()
+        if (worldManager != null && worldManager.localWorldOpen.getUntracked()) {
+            val previouslyInvited = worldManager.localWorldInfo.getUntracked().invited
+            for (user in users) {
+                if (user in previouslyInvited) {
+                    worldManager.sendInviteToMember(user)
+                }
+            }
+            worldManager.updateLocalWorldInfo { it.copy(invited = it.invited + users) }
             sendOutgoingSpsInviteNotification(name)
         } else if (currentServerData != null) {
             connectionManager.socialManager.reinviteFriendsOnServer(currentServerData.serverIP, users)

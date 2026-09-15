@@ -169,7 +169,6 @@ class TintVanillaButtonsEffectShared {
             """.trimIndent()
         ).apply {
             blendState = BlendState.PREMULTIPLIED_ALPHA
-            depthTest = URenderPipeline.DepthTest.Always
         }.build()
     }
 }

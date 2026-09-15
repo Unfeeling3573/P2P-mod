@@ -15,7 +15,7 @@ import com.google.common.primitives.Bytes;
 import gg.essential.Essential;
 import gg.essential.connectionmanager.common.packet.Packet;
 import gg.essential.connectionmanager.common.packet.connection.ConnectionKeepAlivePacket;
-import gg.essential.data.VersionInfo;
+import gg.essential.data.VersionData;
 import gg.essential.handlers.CertChain;
 import gg.essential.network.connectionmanager.ConnectionManagerKt.CloseInfo;
 import gg.essential.network.connectionmanager.legacyjre.LegacyJre;
@@ -281,10 +281,11 @@ public class Connection extends WebSocketClient {
         this.addHeader("Essential-User-UUID", uuid.toString());
         this.addHeader("Essential-User-Name", userName);
 
-        VersionInfo versionInfo = new VersionInfo();
-        this.addHeader("Essential-Mod-Version", versionInfo.getEssentialVersion());
-        this.addHeader("Essential-Mod-Commit", versionInfo.getEssentialCommit());
-        this.addHeader("Essential-Mod-Branch", versionInfo.getEssentialBranch());
+        this.addHeader("Essential-Mod-Version", VersionData.INSTANCE.getEssentialVersion());
+        this.addHeader("Essential-Mod-Commit", VersionData.INSTANCE.getEssentialCommit());
+        this.addHeader("Essential-Mod-Branch", VersionData.INSTANCE.getEssentialBranch());
+        this.addHeader("Essential-Minecraft-Version", VersionData.INSTANCE.getMinecraftVersion());
+        this.addHeader("Essential-Minecraft-Modloader", VersionData.INSTANCE.getMinecraftPlatform().name());
 
         // Attempt to connect.
         try {

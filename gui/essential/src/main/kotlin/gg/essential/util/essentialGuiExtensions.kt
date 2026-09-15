@@ -24,6 +24,7 @@ import gg.essential.elementa.constraints.*
 import gg.essential.elementa.constraints.animation.*
 import gg.essential.elementa.dsl.*
 import gg.essential.elementa.events.UIClickEvent
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.elementa.state.State
 import gg.essential.elementa.utils.withAlpha
 import gg.essential.gui.EssentialPalette
@@ -389,12 +390,29 @@ fun newGradient(
             super.preFirstDraw()
         }
 
+        @Deprecated(
+            "`draw`-style rendering is deprecated. Use `extract` instead.",
+            replaceWith = ReplaceWith("extractBeforeChildren(extractor)")
+        )
         override fun beforeChildrenDraw(matrixStack: UMatrixStack) {
             // Run in afterDraw
         }
 
+        @Deprecated(
+            "`draw`-style rendering is deprecated. Use `extract` instead.",
+            replaceWith = ReplaceWith("extractAfter(extractor)")
+        )
         override fun afterDraw(matrixStack: UMatrixStack) {
+            @Suppress("DEPRECATION")
             super.beforeChildrenDraw(matrixStack)
+        }
+
+        override fun extractBeforeChildren(extractor: ElementaExtractor) {
+            // Run in extractAfter
+        }
+
+        override fun extractAfter(extractor: ElementaExtractor) {
+            super.extractBeforeChildren(extractor)
         }
     }
 }

@@ -119,6 +119,9 @@ class McIntegratedServerManager(val server: IntegratedServer) : IntegratedServer
     private val mutableStatusResponseJson = mutableStateOf<String?>(null)
     override val statusResponseJson: State<String?> = mutableStatusResponseJson
 
+    private val isServerPublicMutable: MutableState<Boolean> = mutableStateOf(false)
+    override val isServerPublic: State<Boolean> = isServerPublicMutable
+
     private val openToLanSourceState = mutableStateOf<State<Boolean>?>(null)
     private val whitelistSourceState = mutableStateOf<State<Set<UUID>>?>(null)
     private val opsSourceState = mutableStateOf<State<Set<UUID>>?>(null)
@@ -240,7 +243,9 @@ class McIntegratedServerManager(val server: IntegratedServer) : IntegratedServer
                             //#if MC >= 26.2
                             //$$ MinecraftServer.MultiplayerScope.LAN,
                             //#endif
-                        //$$     null,
+                            //#if MC < 26.3
+                            //$$ null,
+                            //#endif
                         //$$     false,
                         //$$     port,
                         //$$ )
@@ -504,6 +509,38 @@ class McIntegratedServerManager(val server: IntegratedServer) : IntegratedServer
     var isDefaultGameModeControlledByState: Boolean = false
     var isGameRulesControlledByState: Boolean = false
 
+    private var previousIsServerPublic = false
+    fun onServerTick() {
+        val isPublic = server.public
+        if (isPublic != previousIsServerPublic) {
+            previousIsServerPublic = isPublic
+            coroutineScope.launch {
+                isServerPublicMutable.set(isPublic)
+            }
+        }
+    }
+
+    // NOTE: Called from server main thread!
+    fun updateServerDifficulty(difficulty: McDifficulty) {
+        coroutineScope.launch {
+            difficultySourceState.getUntracked()?.set(Difficulty.fromMc(difficulty))
+        }
+    }
+
+    // NOTE: Called from server main thread!
+    fun updateServerDifficultyLocked(difficultyLocked: Boolean) {
+        coroutineScope.launch {
+            difficultyLockedSourceState.getUntracked()?.set(difficultyLocked)
+        }
+    }
+
+    // NOTE: Called from server main thread!
+    fun updateServerDefaultGameMode(gameMode: McGameMode) {
+        coroutineScope.launch {
+            defaultGameModeSourceState.getUntracked()?.set(GameMode.fromMc(gameMode))
+        }
+    }
+
     // NOTE: Called from server main thread!
     fun updateServerGameRules(changes: Map<UIdentifier, String>) {
         gameRuleUpdateQueue.enqueue {
@@ -580,5 +617,7 @@ class McIntegratedServerManager(val server: IntegratedServer) : IntegratedServer
     }
 }
 
+fun Difficulty.Companion.fromMc(mc: McDifficulty) = Difficulty.entries[mc.difficultyId]
 fun Difficulty.toMc(): McDifficulty = McDifficulty.getDifficultyEnum(ordinal)
+fun GameMode.Companion.fromMc(mc: McGameMode) = GameMode.entries[mc.id]
 fun GameMode.toMc(): McGameMode = McGameMode.getByID(ordinal)

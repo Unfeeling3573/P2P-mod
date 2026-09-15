@@ -14,40 +14,63 @@ package gg.essential.gui.wardrobe.components
 import gg.essential.elementa.UIComponent
 import gg.essential.elementa.constraints.animation.*
 import gg.essential.gui.EssentialPalette
+import gg.essential.gui.common.LoadingIcon
 import gg.essential.gui.elementa.state.v2.*
-import gg.essential.gui.elementa.state.v2.combinators.*
 import gg.essential.gui.layoutdsl.*
 import gg.essential.gui.wardrobe.WardrobeState
 import gg.essential.network.connectionmanager.coins.CoinsManager
+import java.awt.Color
 
-fun LayoutScope.coinsText(coins: Int, modifier: Modifier = Modifier) = coinsText(stateOf(coins), modifier)
+fun LayoutScope.coinsText(
+    coins: Int?,
+    modifier: Modifier = Modifier,
+    loadingModifier: Modifier = modifier,
+    textShadow: Color? = EssentialPalette.TEXT_SHADOW,
+) = coinsText(stateOf(coins), modifier, loadingModifier, textShadow)
 
-fun LayoutScope.coinsText(state: WardrobeState, modifier: Modifier = Modifier) {
-    val coinsVisual = mutableStateOf(state.coins.get()) // grab the current state
+fun LayoutScope.coinsText(
+    state: WardrobeState,
+    modifier: Modifier = Modifier,
+    loadingModifier: Modifier = modifier,
+    textShadow: Color? = EssentialPalette.TEXT_SHADOW,
+) {
+    val coinsVisual = mutableStateOf(state.coins.getUntracked()) // grab the current state
 
-    val textComponent = coinsText(coinsVisual, modifier)
+    val textComponent = coinsText(coinsVisual, modifier, loadingModifier, textShadow)
 
     val propertyHack = object {
         var coinsProperty: Int
-            get() = coinsVisual.get()
+            get() = coinsVisual.getUntracked() ?: 0
             set(value) = coinsVisual.set(value)
     }::coinsProperty
 
-    state.areCoinsVisuallyFrozen.zip(state.coins).onSetValue(this.stateScope) { (frozen, coins) ->
+    State { state.areCoinsVisuallyFrozen() to state.coins() }.onChange(this.stateScope) { (frozen, coins) ->
         if (!frozen) {
-            with(textComponent) {
-                propertyHack.animate(Animations.OUT_EXP, 2.5f, state.coins.get())
+            if (coins == null) {
+                coinsVisual.set(null)
+            } else {
+                with(textComponent) {
+                    propertyHack.animate(Animations.OUT_EXP, 2.5f, coins)
+                }
             }
         }
     }
 }
 
-fun LayoutScope.coinsText(coinsState: State<Int>, modifier: Modifier = Modifier): UIComponent {
-    val textState = coinsState.map { CoinsManager.COIN_FORMAT.format(it) }.toV1(this.stateScope)
-    return row(modifier) {
-        spacer(width = 1f)
-        text(textState, Modifier.shadow(EssentialPalette.TEXT_SHADOW))
-        spacer(width = 5f)
-        icon(EssentialPalette.COIN_7X)
+fun LayoutScope.coinsText(
+    coinsState: State<Int?>,
+    modifier: Modifier = Modifier,
+    loadingModifier: Modifier = modifier,
+    textShadow: Color? = EssentialPalette.TEXT_SHADOW,
+): UIComponent {
+    return row(Modifier.whenTrue({ coinsState() != null }, modifier, loadingModifier)) {
+        ifNotNull(coinsState) {
+            spacer(width = 1f)
+            text(CoinsManager.COIN_FORMAT.format(it), Modifier.shadow(textShadow))
+            spacer(width = 5f)
+            icon(EssentialPalette.COIN_7X)
+        } `else` {
+            LoadingIcon(1.0)(Modifier.shadow(EssentialPalette.TEXT_SHADOW))
+        }
     }
 }

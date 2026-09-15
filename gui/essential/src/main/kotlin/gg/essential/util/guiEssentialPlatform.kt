@@ -13,6 +13,7 @@ package gg.essential.util
 
 import gg.essential.connectionmanager.common.packet.telemetry.ClientTelemetryPacket
 import gg.essential.cosmetics.EquippedCosmetic
+import gg.essential.elementa.renderer.SpecialRenderer
 import gg.essential.gui.common.UIPlayer
 import gg.essential.gui.common.modal.Modal
 import gg.essential.gui.elementa.essentialmarkdown.EssentialMarkdown
@@ -34,6 +35,7 @@ import gg.essential.mod.cosmetics.CosmeticSlot
 import gg.essential.mod.cosmetics.preview.PerspectiveCamera
 import gg.essential.model.backend.RenderBackend
 import gg.essential.network.CMConnection
+import gg.essential.network.connectionmanager.coins.CoinsManager
 import gg.essential.network.connectionmanager.cosmetics.AssetLoader
 import gg.essential.network.connectionmanager.cosmetics.ICosmeticsManager
 import gg.essential.network.connectionmanager.cosmetics.ModelLoader
@@ -44,9 +46,12 @@ import gg.essential.network.connectionmanager.notices.INoticesManager
 import gg.essential.network.connectionmanager.skins.SkinsManager
 import gg.essential.network.connectionmanager.social.RulesManager
 import gg.essential.network.connectionmanager.suspension.SuspensionManager
+import gg.essential.sps.GameModLoader
+import gg.essential.sps.LocalResourcePackIndex
+import gg.essential.sps.WorldsManager
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UImage
-import gg.essential.universal.UMatrixStack
+import gg.essential.universal.render.UGpuTextureView
 import gg.essential.universal.render.URenderPipeline
 import gg.essential.universal.utils.ReleasedDynamicTexture
 import gg.essential.universal.vertex.UBufferBuilder
@@ -117,6 +122,7 @@ interface GuiEssentialPlatform {
 
     val mcProtocolVersion: Int
     val mcGameVersion: String
+    val mcModLoader: GameModLoader
 
     val localModList: Map<String /* Display name */, String /* Version */>
 
@@ -141,13 +147,19 @@ interface GuiEssentialPlatform {
 
     val cosmeticsManager: ICosmeticsManager
 
+    val coinsManager: CoinsManager
+
     val wardrobeSettings: WardrobeSettings
+
+    val localResourcePackIndex: LocalResourcePackIndex
 
     val mojangSkinManager: MojangSkinManager
 
     val screenshotManager: IScreenshotManager
 
     val disabledFeaturesManager: DisabledFeaturesManager
+
+    val worldsManager: WorldsManager
 
     val screenshotFolder: Path
 
@@ -169,6 +181,8 @@ interface GuiEssentialPlatform {
     fun newGlFrameBuffer(width: Int, height: Int, colorFormat: GpuTexture.Format, depthFormat: GpuTexture.Format): GlFrameBuffer
 
     fun newGpuTexture(width: Int, height: Int, format: GpuTexture.Format): GpuTexture
+
+    fun wrapGpuTexture(format: GpuTexture.Format, uGpuTextureView: UGpuTextureView): GpuTexture
 
     val mcFrameBufferColorTexture: GpuTexture
     val mcFrameBufferDepthTexture: GpuTexture?
@@ -205,6 +219,8 @@ interface GuiEssentialPlatform {
      */
     val isZZeroToOne: Boolean
 
+    val isMcLoadingOverlayOpen: Boolean
+
     fun newWindowedTextureProvider(inner: WindowedImageProvider): WindowedTextureProvider
 
     fun newUIPlayer(
@@ -215,8 +231,18 @@ interface GuiEssentialPlatform {
         skinTextureOverride: UIdentifier? = null,
     ): UIPlayer
 
+    fun renderUIPlayer(
+        color: UGpuTextureView,
+        depth: UGpuTextureView,
+        instance: SpecialRenderer.Instance<UIPlayer.RenderState>,
+    )
+    fun overrideUIPlayerRenderTarget(color: UGpuTextureView, depth: UGpuTextureView)
+
     // TODO move DiscordIntegration to :gui:essential project
     fun shouldHideNotificationForHost(uuid: UUID): Boolean
+
+    // TODO move modal to :gui:essential project
+    fun createServerInviteModal(modalManager: ModalManager): Modal
 
     fun openWardrobe(highlight: ItemId? = null)
 
@@ -228,11 +254,11 @@ interface GuiEssentialPlatform {
 
     fun connectToServer(name: String, address: String)
 
+    fun openCreateWorldScreen()
+
     fun shutdown()
 
     val openEmoteWheelKeybind: Keybind
-
-    fun restoreMcStateAfterNanoVGDrawCall()
 
     fun splitHostAndPort(address: String, defaultPort: Int = 25565): Pair<String, Int>
 
@@ -256,8 +282,6 @@ interface GuiEssentialPlatform {
         vertSource: String,
         fragSource: String,
     ): URenderPipeline.Builder
-
-    fun renderToTexture(width: Int, height: Int, block: (UMatrixStack) -> Unit): GpuTexture
 
     val isEssentialContainerPresent: Boolean
     val modsDependingOnEssential: List<ModInfo>

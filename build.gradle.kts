@@ -55,6 +55,8 @@ dependencies {
     })
     implementation(bundle(project(":kdiscordipc"))!!)
 
+    implementation(bundle("gg.essential.lib:caffeine:2.9.0")!!) // keep in sync with `/libs/build.gradle.kts`
+
     implementation(bundle(project(":cosmetics"))!!)
 
     implementation(bundle(project(":lwjgl3"))!!)
@@ -69,6 +71,7 @@ dependencies {
             exclude(group = "gg.essential.lib", module = "mixinextras")
         }
     }
+    bundle("gg.essential.lib:mixinextras:${libs.versions.mixinextras.get()}")
 
     // Some of our dependencies rely on slf4j but that's not included in MC prior to 1.17, so we'll manually bundle a
     // log4j adapter for those versions
@@ -88,7 +91,10 @@ dependencies {
     }
     if (platform.mcVersion >= 12105 && (platform.isFabric || platform.isNeoForge)) {
         repositories.modrinth()
-        if (platform.mcVersion >= 12106) {
+        if (platform.mcVersion >= 26_03_00) {
+            // TODO replace with proper version once released
+            compileOnly(project(":iris-api-stub"))
+        } else if (platform.mcVersion >= 1_21_06) {
             modCompileOnly("maven.modrinth:iris:1.9.1+1.21.7-${platform.loaderStr}")
         } else {
             modCompileOnly("maven.modrinth:iris:1.8.11+1.21.5-${platform.loaderStr}")
@@ -154,6 +160,7 @@ dependencies {
             12111 -> "0.139.4+1.21.11"
             26_01_00 -> "0.143.14+26.1"
             26_02_00 -> "0.151.0+26.2"
+            26_03_00 -> "0.159.1+26.3"
             else -> error("No fabric API version configured!")
         }
         include(modImplementation(fabricApi.module("fabric-api-base", fapiVersion))!!)
@@ -197,6 +204,14 @@ if (platform.isFabric) {
     // only in newer versions
     configurations.compileClasspath {
         resolutionStrategy.force("net.fabricmc:fabric-loader:0.11.0")
+
+        // Fabric Mixin as of https://github.com/FabricMC/Mixin/pull/226 supports multiple @At and @Slice annotations.
+        // This however produces bytecode which is not compatible with old Mixin(Extras) versions, so we must not use
+        // it (which happens automatically if we compile against it!) prior to 26.3 (where it is always supported).
+        if (platform.mcVersion < 26_03_00) {
+            resolutionStrategy.force("net.fabricmc:sponge-mixin:0.17.0+mixin.0.8.7")
+            resolutionStrategy.force("io.github.llamalad7:mixinextras-fabric:${libs.versions.mixinextras.get()}")
+        }
     }
 }
 

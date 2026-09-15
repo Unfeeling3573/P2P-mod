@@ -17,9 +17,21 @@ import gg.essential.gui.EssentialPalette
 import gg.essential.gui.common.AutoImageSize
 import gg.essential.gui.common.SequenceAnimatedUIImage
 import gg.essential.gui.elementa.state.v2.State
+import gg.essential.gui.elementa.state.v2.asyncMap
+import gg.essential.gui.elementa.state.v2.combinators.letState
 import gg.essential.gui.image.AnimatedResourceImageFactory
 import gg.essential.gui.image.ImageFactory
+import gg.essential.sps.WorldManager
+import gg.essential.util.loadUIImage
+import gg.essential.util.toImageFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import java.io.ByteArrayInputStream
+import java.io.IOException
+import javax.imageio.ImageIO
 
 private val LOGGER = LoggerFactory.getLogger("Essential Logger")
 
@@ -45,6 +57,29 @@ fun LayoutScope.icon(icon: gg.essential.elementa.state.State<ImageFactory>, modi
 
 fun LayoutScope.image(image: AnimatedResourceImageFactory, modifier: Modifier = Modifier): SequenceAnimatedUIImage {
     return image.create()(modifier)
+}
+
+/** Creates an [image] with the given world's icon as the image to be used. */
+fun LayoutScope.worldIcon(
+    coroutineScope: CoroutineScope,
+    world: WorldManager,
+    modifier: Modifier = Modifier,
+    worldIconBytes: State<Deferred<ByteArray?>?> = world.worldIconBytes,
+) {
+    val worldIconState = worldIconBytes.asyncMap(coroutineScope) { deferredBytes ->
+        deferredBytes?.await()?.let { bytes ->
+            try {
+                loadUIImage(withContext(Dispatchers.Default) {
+                    ImageIO.read(ByteArrayInputStream(bytes))
+                }).toImageFactory()
+            } catch (e: IOException) {
+                LOGGER.warn("Failed to parse icon.png for world ${world.name.getUntracked()}", e)
+                null
+            }
+        }
+    }.letState { it ?: EssentialPalette.PACK_128X }
+
+    image(worldIconState, modifier)
 }
 
 @Suppress("unused")

@@ -13,6 +13,7 @@ package gg.essential.gui.common.input
 
 import gg.essential.elementa.constraints.*
 import gg.essential.elementa.dsl.*
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.EssentialPalette
 import gg.essential.universal.UMatrixStack
 import java.awt.Color
@@ -129,6 +130,49 @@ open class UITextInput @JvmOverloads constructor(
         activateAction(getText())
     }
 
+    override fun extractComponent(extractor: ElementaExtractor) {
+        if (!active && !hasText()) {
+            extractPlaceholder(extractor)
+            return
+        }
+
+        val lineText = getTextForRender()
+
+        if (hasSelection()) {
+            var currentX = getLeft()
+            cursorComponent.hide(instantly = true)
+
+            if (!selectionStart().isAtLineStart) {
+                val preSelectionText = lineText.substring(0, selectionStart().column)
+                extractUnselectedText(extractor, preSelectionText, currentX, row = 0)
+                currentX += preSelectionText.width(getTextScale(), getFontProvider())
+            }
+
+            val selectedText = lineText.substring(selectionStart().column, selectionEnd().column)
+            val selectedTextWidth = selectedText.width(getTextScale(), getFontProvider())
+            extractSelectedText(extractor, selectedText, currentX, currentX + selectedTextWidth, row = 0)
+            currentX += selectedTextWidth
+
+            if (!selectionEnd().isAtLineEnd) {
+                extractUnselectedText(extractor, lineText.substring(selectionEnd().column), currentX, row = 0)
+            }
+        } else {
+            if (active) {
+                cursorComponent.setY(basicYConstraint {
+                    getTop()
+                })
+                setCursorPos()
+            }
+
+            extractUnselectedText(extractor, lineText, getLeft(), 0)
+        }
+    }
+
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
+    @Suppress("DEPRECATION")
     override fun draw(matrixStack: UMatrixStack) {
         beforeDrawCompat(matrixStack)
 

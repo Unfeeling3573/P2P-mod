@@ -14,12 +14,12 @@ package gg.essential.gui.multiplayer.disconnect
 import gg.essential.Essential
 import gg.essential.config.EssentialConfig
 import gg.essential.elementa.font.DefaultFonts
+import gg.essential.elementa.font.extractMcScale
 import gg.essential.elementa.state.BasicState
 import gg.essential.elementa.utils.getStringSplitToWidth
 import gg.essential.gui.account.factory.ManagedSessionFactory
 import gg.essential.gui.menu.AccountManager
 import gg.essential.gui.modals.AddAccountModal
-import gg.essential.universal.UMatrixStack
 import gg.essential.universal.UMinecraft
 import gg.essential.util.*
 import net.minecraft.client.gui.GuiButton
@@ -129,18 +129,8 @@ class InvalidSessionRefreshGui(
     fun draw(drawContext: UDrawContext) {
         if (!::refreshSessionButton.isInitialized) return
 
-        //#if MC>=12106
-        //$$ // FIXME This is a bit wasteful, but there should only be at most one of these at any one time.
-        //$$ //       But once we have a more general DrawContext in UC/Elementa, we should get rid of this.
-        //$$ gg.essential.util.AdvancedDrawContext.drawImmediate(drawContext.mc) { matrixStack ->
-        //$$     doDraw(matrixStack)
-        //$$ }
-        //#else
-        doDraw(drawContext.matrixStack)
-        //#endif
-    }
+        val extractor = McElementaExtractor(drawContext)
 
-    private fun doDraw(matrixStack: UMatrixStack) {
         if (errorMessage.isNotEmpty()) {
             //#if MC>=12000
             //$$ var y = 80f
@@ -149,13 +139,12 @@ class InvalidSessionRefreshGui(
             //#endif
 
             getStringSplitToWidth(errorMessage, screen.width - 50f, 1.0f).reversed().forEach {
-                DefaultFonts.VANILLA_FONT_RENDERER.drawString(
-                    matrixStack,
+                DefaultFonts.VANILLA_FONT_RENDERER.extractMcScale(
+                    extractor,
                     it,
                     Color.WHITE,
                     (screen.width / 2) - (DefaultFonts.VANILLA_FONT_RENDERER.getStringWidth(it, 10.0f) / 2),
                     returnButton.y - y,
-                    10f,
                     1f,
                 )
                 y += UMinecraft.getFontRenderer().FONT_HEIGHT + 1
@@ -163,16 +152,17 @@ class InvalidSessionRefreshGui(
         }
 
         if (isAccountManaged) {
-            DefaultFonts.VANILLA_FONT_RENDERER.drawString(
-                matrixStack,
+            DefaultFonts.VANILLA_FONT_RENDERER.extractMcScale(
+                extractor,
                 "Always refresh session:",
                 Color.WHITE,
                 refreshSessionButton.x.toFloat(),
                 alwaysRefreshButton.y + 6f,
-                10f,
                 1f,
             )
         }
+
+        extractor.close()
     }
 
     fun onButtonClicked(button: GuiButton) {

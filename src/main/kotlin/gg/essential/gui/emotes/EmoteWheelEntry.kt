@@ -208,6 +208,8 @@ class EmoteWheelEntry(
 }
 
 // For visually debugging hitboxes. Not super accurate but gives a general idea.
+@Deprecated("Doesn't work any more. Needs updating if you want to use it again.")
+@Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
 class EssentialShape(colorState: State<Color>, private val clockwise: Boolean = false) : UIShape() {
 
     init { colorState.onSetValueAndNow { setColor(it) } }

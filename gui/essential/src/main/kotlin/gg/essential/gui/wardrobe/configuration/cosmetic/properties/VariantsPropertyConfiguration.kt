@@ -18,11 +18,15 @@ import gg.essential.elementa.components.Window
 import gg.essential.elementa.constraints.*
 import gg.essential.elementa.dsl.*
 import gg.essential.elementa.effects.OutlineEffect
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
 import gg.essential.elementa.state.BasicState
 import gg.essential.elementa.state.State
 import gg.essential.elementa.state.toConstraint
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.common.bindParent
+import gg.essential.gui.common.constraints.extractColorPicker
+import gg.essential.gui.common.constraints.extractHueLine
 import gg.essential.gui.common.effect.CheckerboardBackgroundEffect
 import gg.essential.gui.common.input.essentialStateTextInput
 import gg.essential.gui.common.input.essentialStringInput
@@ -38,16 +42,10 @@ import gg.essential.model.util.Color
 import gg.essential.model.util.toJavaColor
 import gg.essential.network.connectionmanager.cosmetics.*
 import gg.essential.network.cosmetics.Cosmetic
-import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
 import gg.essential.universal.USound
-import gg.essential.universal.render.URenderPipeline
-import gg.essential.universal.shader.BlendState
-import gg.essential.universal.vertex.UBufferBuilder
-import gg.essential.universal.vertex.UVertexConsumer
 import gg.essential.util.*
 import gg.essential.vigilance.utils.onLeftClick
-import org.lwjgl.opengl.GL11
 
 class VariantsPropertyConfiguration(
     cosmeticsDataWithChanges: CosmeticsDataWithChanges,
@@ -136,8 +134,6 @@ class VariantsPropertyConfiguration(
         private val brightness = BasicState(HSBColor(currentColorState.getUntracked().toJavaColor()).brightness)
         private val hueSaturationSide = 69f
 
-        private val hueColorList: List<java.awt.Color> =
-            (0..hueSaturationSide.toInt()).map { i -> java.awt.Color(java.awt.Color.HSBtoRGB(i / hueSaturationSide, 1f, 0.9f)) }
         private val componentCrossDimension =
             9f // The other side of the rectangle that isn't of equal side fo [hueSaturationSide]
 
@@ -199,10 +195,18 @@ class VariantsPropertyConfiguration(
         } childOf hueSaturationBrightnessRow
 
         private val hueArea by object : UIComponent() {
+            override fun extractComponent(extractor: ElementaExtractor) {
+                extractHueLine(extractor, this)
+            }
+            @Deprecated(
+                "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+                replaceWith = ReplaceWith("extract(extractor)")
+            )
             override fun draw(matrixStack: UMatrixStack) {
+                @Suppress("DEPRECATION")
                 beforeDraw(matrixStack)
-                drawHueLine(matrixStack, this)
-
+                extractComponent(ImmediateElementaExtractor(matrixStack))
+                @Suppress("DEPRECATION")
                 super.draw(matrixStack)
             }
         }.centered().constrain {
@@ -218,10 +222,18 @@ class VariantsPropertyConfiguration(
         } effect OutlineEffect(EssentialPalette.TEXT_HIGHLIGHT, 1f) childOf hueArea
 
         private val saturationBrightnessArea by object : UIComponent() {
+            override fun extractComponent(extractor: ElementaExtractor) {
+                extractColorPicker(extractor, this, hue.get())
+            }
+            @Deprecated(
+                "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+                replaceWith = ReplaceWith("extract(extractor)")
+            )
             override fun draw(matrixStack: UMatrixStack) {
+                @Suppress("DEPRECATION")
                 beforeDraw(matrixStack)
-                drawColorPicker(matrixStack, this)
-
+                extractComponent(ImmediateElementaExtractor(matrixStack))
+                @Suppress("DEPRECATION")
                 super.draw(matrixStack)
             }
         }.centered().constrain {
@@ -269,96 +281,6 @@ class VariantsPropertyConfiguration(
             effect(ShadowEffect(java.awt.Color.BLACK))
         }
 
-        private fun drawColorPicker(matrixStack: UMatrixStack, component: UIComponent) {
-            val left = component.getLeft().toDouble()
-            val top = component.getTop().toDouble()
-            val right = component.getRight().toDouble()
-            val bottom = component.getBottom().toDouble()
-
-            setupDraw()
-            val graphics = UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_COLOR)
-
-            val horizontalSize = (right - left).toInt()
-
-            for (x in (0..horizontalSize)) {
-                val curLeft = left + x
-                val curRight = curLeft + 1
-
-                var first = true
-                val verticalSize = (bottom - top).toInt()
-                for (y in 0..verticalSize) {
-                    val yPos = top + y
-                    val color = getColor(x.toFloat() / horizontalSize, 1 - y.toFloat() / verticalSize, hue.get())
-
-                    if (!first) {
-                        drawVertex(graphics, matrixStack, curLeft, yPos, color)
-                        drawVertex(graphics, matrixStack, curRight, yPos, color)
-                    }
-
-                    if (y < horizontalSize) {
-                        drawVertex(graphics, matrixStack, curRight, yPos, color)
-                        drawVertex(graphics, matrixStack, curLeft, yPos, color)
-                    }
-                    first = false
-                }
-
-            }
-
-            graphics.build()?.drawAndClose(COLOR_PICKER_PIPELINE)
-            cleanupDraw()
-        }
-
-        private fun getColor(x: Float, y: Float, hue: Float): java.awt.Color {
-            return java.awt.Color(java.awt.Color.HSBtoRGB(hue, x, y))
-        }
-
-        private fun drawHueLine(matrixStack: UMatrixStack, component: UIComponent) {
-            val left = component.getLeft().toDouble()
-            val top = component.getTop().toDouble()
-            val right = component.getRight().toDouble()
-            val height = component.getHeight().toDouble()
-
-            setupDraw()
-            val graphics = UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_COLOR)
-
-            var first = true
-            for ((i, color) in hueColorList.withIndex()) {
-                val yPos = top + (i.toFloat() * height / hueSaturationSide)
-                if (!first) {
-                    drawVertex(graphics, matrixStack, left, yPos, color)
-                    drawVertex(graphics, matrixStack, right, yPos, color)
-                }
-
-                drawVertex(graphics, matrixStack, right, yPos, color)
-                drawVertex(graphics, matrixStack, left, yPos, color)
-
-                first = false
-            }
-
-            graphics.build()?.drawAndClose(COLOR_PICKER_PIPELINE)
-            cleanupDraw()
-        }
-
-        private fun setupDraw() {
-            UGraphics.shadeModel(GL11.GL_SMOOTH)
-        }
-
-        private fun cleanupDraw() {
-            UGraphics.shadeModel(GL11.GL_FLAT)
-        }
-
-        private fun drawVertex(graphics: UVertexConsumer, matrixStack: UMatrixStack, x: Double, y: Double, color: java.awt.Color) {
-            graphics
-                .pos(matrixStack, x, y, 0.0)
-                .color(
-                    color.red.toFloat() / 255f,
-                    color.green.toFloat() / 255f,
-                    color.blue.toFloat() / 255f,
-                    color.alpha.toFloat() / 255f
-                )
-                .endVertex()
-        }
-
         private fun createMouseDragListener(component: UIComponent): State<Pair<Float, Float>> {
             var mouseHeld = false
             val basicState = BasicState(0f to 0f)
@@ -392,15 +314,5 @@ class VariantsPropertyConfiguration(
             }
             return basicState
         }
-    }
-
-    companion object {
-        private val COLOR_PICKER_PIPELINE = URenderPipeline.builderWithDefaultShader(
-            "essential:variant_color_picker",
-            UGraphics.DrawMode.QUADS,
-            UGraphics.CommonVertexFormats.POSITION_COLOR,
-        ).apply {
-            blendState = BlendState.ALPHA
-        }.build()
     }
 }

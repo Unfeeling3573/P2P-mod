@@ -18,6 +18,7 @@ import gg.essential.cosmetics.CosmeticsRenderState;
 import gg.essential.cosmetics.IconCosmeticRenderer;
 import gg.essential.handlers.OnlineIndicator;
 import gg.essential.model.ModelInstance;
+import gg.essential.universal.UGraphics;
 import gg.essential.universal.UMatrixStack;
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.gui.FontRenderer;
@@ -68,6 +69,6 @@ public class Mixin_NameplateIcon_Handle10809SneakingCopy<T extends EntityLivingB
         }
 
         IconCosmeticRenderer.INSTANCE.drawNameTagIconAndVersionConsistentPadding(
-            new UMatrixStack(), color, backgroundColor, icon, str, light);
+            new UMatrixStack(), color, backgroundColor, icon, UGraphics.getStringWidth(str), light);
     }
 }

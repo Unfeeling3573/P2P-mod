@@ -13,6 +13,7 @@ package gg.essential.gui.elementa.essentialmarkdown.drawables
 
 import gg.essential.elementa.components.UIBlock
 import gg.essential.elementa.dsl.width
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.elementa.utils.withAlpha
 import gg.essential.gui.elementa.essentialmarkdown.DrawState
 import gg.essential.gui.elementa.essentialmarkdown.HeaderLevelConfig
@@ -296,6 +297,7 @@ class ParagraphDrawable(
         )
     }
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
     override fun draw(matrixStack: UMatrixStack, state: DrawState) {
         drawables.filterIsInstance<TextDrawable>().forEach { it.beforeDraw(state) }
         drawables.forEach { it.drawCompat(matrixStack, state) }
@@ -311,6 +313,11 @@ class ParagraphDrawable(
                 layout.elementHeight.toDouble()
             )
         }
+    }
+
+    override fun extract(extractor: ElementaExtractor, state: DrawState) {
+        drawables.filterIsInstance<TextDrawable>().forEach { it.beforeDraw(state) }
+        drawables.forEach { it.extract(extractor, state) }
     }
 
     override fun cursorAt(mouseX: Float, mouseY: Float, dragged: Boolean, mouseButton: Int): Cursor<*> {

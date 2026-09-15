@@ -1,0 +1,86 @@
+/*
+ * Copyright (c) 2024 ModCore Inc. All rights reserved.
+ *
+ * This code is part of ModCore Inc.'s Essential Mod repository and is protected
+ * under copyright registration # TX0009138511. For the full license, see:
+ * https://github.com/EssentialGG/Essential/blob/main/LICENSE
+ *
+ * You may not use, copy, reproduce, modify, sell, license, distribute,
+ * commercialize, or otherwise exploit, or create derivative works based
+ * upon, this file or any other in this repository, all of which is reserved by Essential.
+ */
+//#if MC < 1.21.6
+package gg.essential.util
+
+import org.lwjgl.opengl.GL11
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+
+//#if MC == 1.21.5
+//$$ import com.mojang.blaze3d.systems.RenderSystem
+//#endif
+
+internal data class ScissorState(val enabled: Boolean, val x: Int, val y: Int, val width: Int, val height: Int) {
+    fun activate() {
+        //#if MC == 1.21.5
+        //$$ if (enabled) {
+        //$$     RenderSystem.SCISSOR_STATE.enable(x, y, width, height)
+        //$$ } else {
+        //$$     RenderSystem.SCISSOR_STATE.disable()
+        //$$ }
+        //#else
+        if (enabled) {
+            GL11.glEnable(GL11.GL_SCISSOR_TEST)
+        } else {
+            GL11.glDisable(GL11.GL_SCISSOR_TEST)
+        }
+        GL11.glScissor(x, y, width, height)
+        //#endif
+    }
+
+    fun coerceIn(x: Int, y: Int, width: Int, height: Int): ScissorState {
+        var x1 = this.x
+        var x2 = this.x + this.width
+        var y1 = this.y
+        var y2 = this.y + this.height
+        x1 = x1.coerceAtLeast(x)
+        x2 = x2.coerceAtMost(x + width)
+        y1 = y1.coerceAtLeast(y)
+        y2 = y2.coerceAtMost(y + height)
+        return ScissorState(
+            enabled,
+            x1,
+            y1,
+            (x2 - x1).coerceAtLeast(0),
+            (y2 - y1).coerceAtLeast(0),
+        )
+    }
+
+    companion object {
+        val DISABLED = ScissorState(false, 0, 0, 0, 0)
+
+        // Note: LWJGL2 requires a buffer of 16 elements, even if the property we query only has 4
+        private val tmpIntBuffer = ByteBuffer.allocateDirect(16 * Int.SIZE_BYTES).order(ByteOrder.nativeOrder()).asIntBuffer()
+
+        fun active(): ScissorState {
+            //#if MC == 1.21.5
+            //$$ return with(RenderSystem.SCISSOR_STATE) { ScissorState(isEnabled, x, y, width, height) }
+            //#else
+            val bounds = tmpIntBuffer
+                //#if MC >= 1.16
+                //$$ .also { GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, it) }
+                //#else
+                .also { GL11.glGetInteger(GL11.GL_SCISSOR_BOX, it) }
+                //#endif
+            return ScissorState(
+                enabled = GL11.glGetBoolean(GL11.GL_SCISSOR_TEST),
+                x = bounds[0],
+                y = bounds[1],
+                width = bounds[2],
+                height = bounds[3],
+            )
+            //#endif
+        }
+    }
+}
+//#endif

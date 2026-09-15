@@ -39,7 +39,7 @@ public class MixinGuiMainMenu {
     // Same reason as above
     @Inject(method = "keyTyped", at = @At("TAIL"))
     private void keyTyped2(char typedChar, int keyCode, CallbackInfo ci) {
-        Essential.EVENT_BUS.post(new GuiKeyTypedEvent.Post((GuiScreen) (Object) this, typedChar, keyCode));
+        Essential.EVENT_BUS.post(new GuiKeyTypedEvent.Post((GuiScreen) (Object) this, typedChar, keyCode, -1));
     }
     //#endif
 }

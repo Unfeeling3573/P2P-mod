@@ -12,10 +12,8 @@
 package gg.essential.mixins.transformers.server.integrated;
 
 import com.llamalad7.mixinextras.sugar.Local;
-import gg.essential.Essential;
-import gg.essential.network.connectionmanager.sps.SPSManager;
-import gg.essential.universal.UMinecraft;
-import gg.essential.util.ExtensionsKt;
+import gg.essential.mixins.ext.server.integrated.IntegratedServerExt;
+import gg.essential.sps.McIntegratedServerManager;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.EnumDifficulty;
 import org.spongepowered.asm.mixin.Mixin;
@@ -34,16 +32,10 @@ public abstract class Mixin_SetDifficulty {
 
     @Inject(method = "setDifficultyForAllWorlds", at = @At(value = "INVOKE", target = SET_DIFFICULTY), cancellable = true)
     public void onSetDifficulty(CallbackInfo ci, @Local(argsOnly = true) EnumDifficulty difficulty) {
-        ExtensionsKt.getExecutor(UMinecraft.getMinecraft()).execute(() -> {
-            SPSManager sps = Essential.getInstance().getConnectionManager().getSpsManager();
-            if (sps.getLocalSession() != null && sps.getDifficulty() != difficulty) {
-                sps.updateWorldSettings(
-                        sps.isAllowCheats(),
-                        sps.getCurrentGameMode(),
-                        difficulty,
-                        sps.isDifficultyLocked()
-                );
-            }
-        });
+        McIntegratedServerManager manager = ((IntegratedServerExt) this).getEssential$manager();
+        if (manager.isDifficultyControlledByState()) {
+            manager.updateServerDifficulty(difficulty);
+            ci.cancel();
+        }
     }
 }

@@ -17,7 +17,6 @@ import com.sparkuniverse.toolbox.util.DateTime;
 import gg.essential.Essential;
 import gg.essential.commands.EssentialCommandRegistry;
 import gg.essential.compat.PlasmoVoiceCompat;
-import gg.essential.connectionmanager.common.packet.telemetry.ClientTelemetryPacket;
 import gg.essential.connectionmanager.common.packet.upnp.*;
 import gg.essential.data.SPSData;
 import gg.essential.event.network.server.ServerLeaveEvent;
@@ -60,21 +59,15 @@ import net.minecraft.server.management.UserListOps;
 import net.minecraft.server.management.UserListWhitelist;
 import net.minecraft.server.management.UserListWhitelistEntry;
 import net.minecraft.world.EnumDifficulty;
-import net.minecraft.world.GameRules;
 import net.minecraft.world.GameType;
 import net.minecraft.world.World;
 import net.minecraft.world.storage.WorldInfo;
-import org.apache.commons.codec.digest.DigestUtils;
-import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.File;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 //#if MC >= 26.2
@@ -175,10 +168,6 @@ public class SPSManager extends StateCallbackManager<IStatusManager> implements 
         Runtime.getRuntime().addShutdownHook(new Thread(this::closeLocalSession)); // cleaning up UPnP if we can
     }
 
-    public GameType getCurrentGameMode() {
-        return currentGameMode;
-    }
-
     public boolean isAllowCheats() {
         return allowCheats;
     }
@@ -186,11 +175,6 @@ public class SPSManager extends StateCallbackManager<IStatusManager> implements 
     @Nullable
     public UPnPSession getRemoteSession(UUID hostUUID) {
         return this.remoteSessions.get(hostUUID);
-    }
-
-    @NotNull
-    public Collection<UPnPSession> getRemoteSessions() {
-        return Collections.unmodifiableCollection(this.remoteSessions.values());
     }
 
     public void addRemoteSession(@NotNull UPnPSession session) {
@@ -270,21 +254,6 @@ public class SPSManager extends StateCallbackManager<IStatusManager> implements 
         persistSettings();
     }
 
-    public synchronized void reinviteUsers(Set<UUID> users) {
-        if (this.localSession == null) {
-            throw new IllegalStateException("Cannot update invites while no session is active.");
-        }
-
-        // Only revoke invites for users that aren't already in the session, otherwise they'd get kicked
-        Set<UUID> offlineUsers = users.stream()
-            .filter(uuid -> getInvitedUsers().contains(uuid) && !getOnlineState(uuid).getUntracked())
-            .collect(Collectors.toSet());
-        // No need to refresh the whitelist and persist settings when revoking since we'll immediately reinvite the users
-        revokeInvites(offlineUsers);
-
-        updateInvitedUsers(SetsKt.plus(this.localSession.getInvites(), users));
-    }
-
     @Nullable
     public UPnPSession getLocalSession() {
         return this.localSession;
@@ -296,10 +265,6 @@ public class SPSManager extends StateCallbackManager<IStatusManager> implements 
 
     public boolean isDifficultyLocked() {
         return difficultyLocked;
-    }
-
-    public Instant getSessionStartTime() {
-        return sessionStartTime;
     }
 
     public void startLocalSession(SPSSessionSource sessionSource) {
@@ -350,7 +315,8 @@ public class SPSManager extends StateCallbackManager<IStatusManager> implements 
             //#if MC >= 26.2
             //$$ MinecraftServer.MultiplayerScope.LAN,
             //#endif
-            //#if MC >= 26.2
+            //#if MC >= 26.3
+            //#elseif MC >= 26.2
             //$$ null,
             //#else
             //$$ currentGameMode,
@@ -434,37 +400,6 @@ public class SPSManager extends StateCallbackManager<IStatusManager> implements 
     }
 
     public synchronized void closeLocalSession() {
-
-        IntegratedServer server = Minecraft.getMinecraft().getIntegratedServer();
-        UPnPSession oldSession = this.localSession;
-        if (oldSession != null) {
-            if (server != null) {
-                sendSessionTelemetry(server, oldSession);
-            }
-
-            // Remove all invites without persisting the settings, so they will be re-added when a new session is created
-            revokeInvites(oldSession.getInvites());
-        }
-        currentGameMode = null;
-        allowCheats = false;
-        oppedPlayers.clear();
-        onlinePlayerStates.clear();
-
-        this.localSession = null;
-        this.localSessionSource = null;
-
-        ResourcePackSharingHttpServer.INSTANCE.stopServer();
-
-        resourcePackUrl = null;
-        resourcePackChecksum = null;
-        shareResourcePack = false;
-        tpsSessionMonitor = null;
-
-        ExtensionsKt.getExecutor(Minecraft.getMinecraft()).execute(EssentialCommandRegistry.INSTANCE::unregisterSPSHostCommands);
-
-        this.updateQueue.enqueue(new ClientUPnPSessionClosePacket());
-
-        ExtensionsKt.getExecutor(Minecraft.getMinecraft()).execute(WindowTitleManager.INSTANCE::updateTitle);
     }
 
     @Subscribe
@@ -475,63 +410,6 @@ public class SPSManager extends StateCallbackManager<IStatusManager> implements 
         if (server == null || !server.getPublic()) {
             closeLocalSession();
         }
-    }
-
-    private static String cpuInfo() {
-        //#if MC>=12105
-        //$$ try {
-        //$$     oshi.hardware.CentralProcessor processor = new oshi.SystemInfo().getHardware().getProcessor();
-        //$$     (processor.getLogicalProcessorCount() + "x " + processor.getProcessorIdentifier().getName()).replaceAll("\\s+", " ");
-        //$$     return "${}x ${processor.processorIdentifier.name}";
-        //$$ } catch (Throwable e) {
-        //$$     return "<unknown>";
-        //$$ }
-        //#elseif MC>=11600
-        //$$ return com.mojang.blaze3d.platform.PlatformDescriptors.getCpuInfo();
-        //#else
-        return net.minecraft.client.renderer.OpenGlHelper.getCpu();
-        //#endif
-    }
-
-    private void sendSessionTelemetry(IntegratedServer server, UPnPSession oldSession) {
-        File worldDirectory = ExtensionsKt.getWorldDirectory(server).toFile();
-
-        float averageTPS;
-        float minTPS;
-        float maxTPS;
-        if (tpsSessionMonitor != null) {
-            averageTPS = tpsSessionMonitor.getAverageTPS();
-            minTPS = tpsSessionMonitor.getMinTPS();
-            maxTPS = tpsSessionMonitor.getMaxTPS();
-        } else {
-            averageTPS = 0f;
-            minTPS = 0f;
-            maxTPS = 0f;
-        }
-        HashMap<String, Object> metadata = new HashMap<String, Object>() {{
-            put("userCPU", cpuInfo());
-            put("worldNameHash", DigestUtils.sha256Hex(UUIDUtil.getClientUUID() + worldDirectory.getName()));
-            put("inviteCount", oldSession.getInvites().size());
-            put("shareRP", shareResourcePack);
-            put("maxConcurrentGuests", maxConcurrentGuests);
-            put("allocatedMemoryMb", Runtime.getRuntime().maxMemory() / 1_000_000);
-            put("sessionDurationSeconds", TimeUnit.MILLISECONDS.toSeconds(Duration.between(sessionStartTime, Instant.now()).toMillis()));
-            put("sessionId", sessionId);
-            put("initiatedFrom", localSessionSource);
-            put("averageTPS", averageTPS);
-            put("minTPS", minTPS);
-            put("maxTPS", maxTPS);
-        }};
-
-        // Fork so calculating the world size doesn't block the main thread
-        Multithreading.runAsync(() -> {
-
-            long worldSizeBytes = FileUtils.sizeOfDirectory(worldDirectory);
-            metadata.put("worldSizeMb", worldSizeBytes / 1_000_000);
-
-            // Return to main thread because enqueue is not thread safe
-            ExtensionsKt.getExecutor(Minecraft.getMinecraft()).execute(() -> connectionManager.getTelemetryManager().enqueue(new ClientTelemetryPacket("SPS_SESSION_4", metadata)));
-        });
     }
 
     // Called from server main thread
@@ -661,36 +539,6 @@ public class SPSManager extends StateCallbackManager<IStatusManager> implements 
         this.remoteSessions.clear();
     }
 
-    public void updateWorldSettings(boolean cheats, @NotNull GameType gameType, @NotNull EnumDifficulty difficulty, boolean difficultyLocked) {
-        final IntegratedServer integratedServer = UMinecraft.getMinecraft().getIntegratedServer();
-        if (integratedServer != null) {
-            getExecutor(integratedServer).execute(() -> {
-                //#if MC<=11202
-                integratedServer.getPlayerList().setGameType(gameType);
-                //#elseif MC < 1.17
-                //$$ integratedServer.getPlayerList().setGameType(gameType);
-                //#else
-                //$$  integratedServer.setDefaultGameMode(gameType);
-                //#endif
-                updateCheatSettings(integratedServer, cheats);
-                //#if MC>=11602
-                //$$ integratedServer.setDifficultyForAllWorlds(difficulty, true);
-                //#else
-                integratedServer.setDifficultyForAllWorlds(difficulty);
-                //#endif
-            });
-        }
-        if (UMinecraft.getWorld() != null && !UMinecraft.getWorld().getWorldInfo().isDifficultyLocked()) {
-            UMinecraft.getWorld().getWorldInfo().setDifficulty(difficulty);
-        }
-        this.allowCheats = cheats;
-        this.currentGameMode = gameType;
-        this.difficulty = difficulty;
-        this.difficultyLocked = difficultyLocked;
-
-        persistSettings();
-    }
-
     private void persistSettings() {
         IntegratedServer integratedServer = UMinecraft.getMinecraft().getIntegratedServer();
         if (integratedServer != null) {
@@ -705,73 +553,6 @@ public class SPSManager extends StateCallbackManager<IStatusManager> implements 
             );
             SPSData.INSTANCE.saveSPSSettings(spsSettings, ExtensionsKt.getWorldDirectory(integratedServer));
         }
-    }
-
-    public void updateWorldGameRules(GameRules gameRules, Map<String, String> gameRuleSettings) {
-        HashMap<String, String> immutableGameRules = new HashMap<>(gameRuleSettings);
-        final IntegratedServer integratedServer = UMinecraft.getMinecraft().getIntegratedServer();
-        if (integratedServer != null) {
-            getExecutor(integratedServer).execute(() -> {
-                //#if MC>=12111
-                //$$ gameRules.accept(new net.minecraft.world.rule.GameRuleVisitor() {
-                //$$     @Override
-                //$$     public void visitBoolean(GameRule<Boolean> rule) {
-                //$$         String valueStr = immutableGameRules.get(rule.toString());
-                //$$         if (valueStr == null) return;
-                //$$         gameRules.setValue(rule, Boolean.parseBoolean(valueStr), integratedServer);
-                //$$     }
-                //$$
-                //$$     @Override
-                //$$     public void visitInt(GameRule<Integer> rule) {
-                //$$         String valueStr = immutableGameRules.get(rule.toString());
-                //$$         if (valueStr == null) return;
-                //$$         gameRules.setValue(rule, Integer.parseInt(valueStr), integratedServer);
-                //$$     }
-                //$$ });
-                //#else
-                //#if MC<=11202
-                immutableGameRules.forEach(gameRules::setOrCreateGameRule);
-                //#else
-                //#if MC>=12102
-                //$$ integratedServer.getGameRules().accept(new GameRules.Visitor() {
-                //#else
-                //$$ GameRules.visitAll(new GameRules.IRuleEntryVisitor() {
-                //#endif
-                //$$     @Override
-                //$$     public <T extends GameRules.RuleValue<T>> void visit(GameRules.RuleKey<T> key, GameRules.RuleType<T> type) {
-                //$$         GameRules.IRuleEntryVisitor.super.visit(key, type);
-                //$$
-                //$$         if (immutableGameRules.containsKey(key.getName())) {
-                //$$             String setting = immutableGameRules.get(key.getName());
-                //$$             GameRules.RuleValue<T> value = gameRules.get(key);
-                //$$
-                //$$             if (value instanceof GameRules.BooleanValue) {
-                //$$                 GameRules.BooleanValue newValue = new GameRules.BooleanValue((GameRules.RuleType<GameRules.BooleanValue>) type, Boolean.parseBoolean(setting));
-                //$$                 ((GameRules.BooleanValue) value).changeValue(newValue, integratedServer);
-                //$$             } else if (value instanceof GameRules.IntegerValue) {
-                //$$                 GameRules.IntegerValue newValue = new GameRules.IntegerValue((GameRules.RuleType<GameRules.IntegerValue>) type, Integer.parseInt(setting));
-                //$$                 ((GameRules.IntegerValue) value).changeValue(newValue, integratedServer);
-                //$$             }
-                //$$         }
-                //$$     }
-                //$$ });
-                //#endif
-                //#endif
-            });
-        }
-    }
-
-    private void updateCheatSettings(final IntegratedServer integratedServer, final boolean cheats) {
-        //#if MC>=11600
-        //$$ // See Mixin_ControlAreCommandsAllowed
-        //#else
-        if (integratedServer.worlds.length > 0) {
-            integratedServer.worlds[0].getWorldInfo().setAllowCommands(cheats);
-        }
-        //#endif
-
-        this.allowCheats = cheats;
-        updateOppedPlayers(new HashSet<>(getOppedPlayers()), false);
     }
 
     public void updateOppedPlayers(Set<UUID> oppedPlayers) {

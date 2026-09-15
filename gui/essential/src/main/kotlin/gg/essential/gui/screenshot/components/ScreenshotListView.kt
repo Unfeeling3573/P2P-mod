@@ -17,6 +17,7 @@ import gg.essential.elementa.components.*
 import gg.essential.elementa.dsl.*
 import gg.essential.elementa.effects.Effect
 import gg.essential.elementa.effects.ScissorEffect
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.elementa.state.v2.State
 import gg.essential.gui.elementa.state.v2.combinators.map
@@ -147,6 +148,13 @@ abstract class ScreenshotListView(
         // FIXME Workaround for ScrollComponent not updating the position of its children until its `draw` method.
         //       Should only be needed until we switch to the V2 scroll component.
         scroller.enableEffect(object : Effect() {
+            override fun extractBeforeChildren(extractor: ElementaExtractor) {
+                updateVisibleTextures()
+            }
+            @Deprecated(
+                "`draw`-style rendering is deprecated. Use `extract` instead.",
+                replaceWith = ReplaceWith("extractBeforeChildren(extractor)")
+            )
             override fun beforeChildrenDraw(matrixStack: UMatrixStack) {
                 updateVisibleTextures()
             }

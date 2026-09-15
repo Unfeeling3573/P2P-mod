@@ -68,12 +68,14 @@ dependencies {
     modApi(libs.elementa)
     modApi(libs.vigilance)
 
-    // Miscellaneous Utility Libraries
-    api("com.github.videogame-hacker:Koffee:88ba1b0") {
-        exclude(module = "asm-commons")
-        exclude(module = "asm-tree")
-        exclude(module = "asm")
+    if (platform.mcVersion < 26_03_00) {
+        // Miscellaneous Utility Libraries
+        api("com.github.videogame-hacker:Koffee:88ba1b0") {
+            exclude(module = "asm-commons")
+            exclude(module = "asm-tree")
+            exclude(module = "asm")
+        }
+        api("gg.essential.lib:caffeine:2.9.0") // keep in sync with `/libs/build.gradle.kts`
+        api("gg.essential.lib:mixinextras:${libs.versions.mixinextras.get()}")
     }
-    api("gg.essential.lib:caffeine:2.9.0") // keep in sync with `/libs/build.gradle.kts`
-    api("gg.essential.lib:mixinextras:${libs.versions.mixinextras.get()}")
 }

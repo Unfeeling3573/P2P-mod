@@ -12,12 +12,14 @@
 package gg.essential.gui.screenshot.components
 
 import gg.essential.elementa.components.UIContainer
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.elementa.state.v2.MutableState
 import gg.essential.gui.elementa.state.v2.mutableStateOf
 import gg.essential.gui.screenshot.ScreenshotId
 import gg.essential.gui.screenshot.providers.RegisteredTexture
 import gg.essential.universal.UMatrixStack
 import gg.essential.universal.UMinecraft
+import kotlin.math.roundToInt
 
 abstract class ScreenshotPreview(
     val screenshotId: ScreenshotId,
@@ -26,11 +28,22 @@ abstract class ScreenshotPreview(
 
     val imgTexture = mutableStateOf<RegisteredTexture?>(null)
 
+    override fun extractComponent(extractor: ElementaExtractor) {
+        val realWidth = (getWidth() * extractor.guiScale).roundToInt()
+        val realHeight = (getHeight() * extractor.guiScale).roundToInt()
+        desiredImageSize.set(Pair(realWidth, realHeight))
+    }
+
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
     override fun draw(matrixStack: UMatrixStack) {
         val realWidth = (getWidth() * UMinecraft.guiScale).toInt()
         val realHeight = (getHeight() * UMinecraft.guiScale).toInt()
         desiredImageSize.set(Pair(realWidth, realHeight))
 
+        @Suppress("DEPRECATION")
         super.draw(matrixStack)
     }
 

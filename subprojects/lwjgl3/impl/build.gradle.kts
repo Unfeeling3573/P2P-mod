@@ -31,7 +31,7 @@ repositories {
 val lwjgl3Bundle by configurations.creating
 dependencies {
     val lwjglVersion = "3.3.3"
-    for (module in listOf("", "-tinyfd", "-nanovg", "-stb")) {
+    for (module in listOf("", "-tinyfd", "-stb")) {
         lwjgl3Bundle("org.lwjgl:lwjgl$module:$lwjglVersion")
         for (platform in listOf("linux", "macos", "macos-arm64", "windows", "windows-x86")) {
             lwjgl3Bundle("org.lwjgl:lwjgl$module:$lwjglVersion:natives-$platform")

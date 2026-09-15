@@ -18,13 +18,17 @@ import gg.essential.elementa.components.Window
 import gg.essential.elementa.constraints.*
 import gg.essential.elementa.dsl.*
 import gg.essential.elementa.effects.OutlineEffect
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
 import gg.essential.elementa.state.BasicState
 import gg.essential.elementa.state.State
 import gg.essential.elementa.state.toConstraint
-import gg.essential.elementa.utils.withAlpha
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.common.IconButton
 import gg.essential.gui.common.bindParent
+import gg.essential.gui.common.constraints.extractAlpha
+import gg.essential.gui.common.constraints.extractColorPicker
+import gg.essential.gui.common.constraints.extractHueLine
 import gg.essential.gui.common.effect.CheckerboardBackgroundEffect
 import gg.essential.gui.common.onSetValueAndNow
 import gg.essential.gui.common.or
@@ -36,23 +40,16 @@ import gg.essential.gui.screenshot.editor.ScreenshotCanvas
 import gg.essential.gui.screenshot.editor.change.EditHistory
 import gg.essential.gui.screenshot.editor.tools.PenTool
 import gg.essential.gui.util.hoveredState
-import gg.essential.universal.UGraphics
 import gg.essential.universal.UKeyboard
 import gg.essential.universal.UMatrixStack
 import gg.essential.universal.USound
-import gg.essential.universal.shader.BlendState
 import gg.essential.util.bindHoverEssentialTooltip
 import gg.essential.util.centered
 import gg.essential.gui.util.hoveredState
 import gg.essential.lib.gson.Gson
-import gg.essential.universal.render.URenderPipeline
-import gg.essential.universal.vertex.UBufferBuilder
-import gg.essential.universal.vertex.UVertexConsumer
 import gg.essential.util.GuiEssentialPlatform.Companion.platform
 import gg.essential.util.HSBColor
 import gg.essential.vigilance.utils.onLeftClick
-import org.intellij.lang.annotations.Language
-import org.lwjgl.opengl.GL11
 import java.awt.Color
 import java.io.IOException
 import kotlin.io.path.div
@@ -217,8 +214,6 @@ class ScreenshotColorPicker(
     private val alpha = BasicState(1f)
     private val hueSaturationSide = 69f
 
-    private val hueColorList: List<Color> =
-        (0..hueSaturationSide.toInt()).map { i -> Color(Color.HSBtoRGB(i / hueSaturationSide, 1f, 0.9f)) }
     private val componentCrossDimension =
         9f // The other side of the rectangle that isn't of equal side fo [hueSaturationSide]
 
@@ -304,10 +299,18 @@ class ScreenshotColorPicker(
     } childOf alphaContainer
 
     private val alphaArea by object : UIComponent() {
+        override fun extractComponent(extractor: ElementaExtractor) {
+            extractAlpha(extractor, this, currentColorState.get().toColor())
+        }
+        @Deprecated(
+            "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+            replaceWith = ReplaceWith("extract(extractor)")
+        )
         override fun draw(matrixStack: UMatrixStack) {
+            @Suppress("DEPRECATION")
             beforeDraw(matrixStack)
-            drawAlpha(matrixStack, this)
-
+            extractComponent(ImmediateElementaExtractor(matrixStack))
+            @Suppress("DEPRECATION")
             super.draw(matrixStack)
         }
     }.constrain {
@@ -324,10 +327,18 @@ class ScreenshotColorPicker(
 
 
     private val hueArea by object : UIComponent() {
+        override fun extractComponent(extractor: ElementaExtractor) {
+            extractHueLine(extractor, this)
+        }
+        @Deprecated(
+            "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+            replaceWith = ReplaceWith("extract(extractor)")
+        )
         override fun draw(matrixStack: UMatrixStack) {
+            @Suppress("DEPRECATION")
             beforeDraw(matrixStack)
-            drawHueLine(matrixStack, this)
-
+            extractComponent(ImmediateElementaExtractor(matrixStack))
+            @Suppress("DEPRECATION")
             super.draw(matrixStack)
         }
     }.centered().constrain {
@@ -343,10 +354,18 @@ class ScreenshotColorPicker(
     } effect OutlineEffect(EssentialPalette.TEXT_HIGHLIGHT, 1f) childOf hueArea
 
     private val saturationBrightnessArea by object : UIComponent() {
+        override fun extractComponent(extractor: ElementaExtractor) {
+            extractColorPicker(extractor, this, hue.get())
+        }
+        @Deprecated(
+            "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+            replaceWith = ReplaceWith("extract(extractor)")
+        )
         override fun draw(matrixStack: UMatrixStack) {
+            @Suppress("DEPRECATION")
             beforeDraw(matrixStack)
-            drawColorPicker(matrixStack, this)
-
+            extractComponent(ImmediateElementaExtractor(matrixStack))
+            @Suppress("DEPRECATION")
             super.draw(matrixStack)
         }
     }.centered().constrain {
@@ -431,88 +450,6 @@ class ScreenshotColorPicker(
         )
     }
 
-    private fun drawColorPicker(matrixStack: UMatrixStack, component: UIComponent) {
-        val left = component.getLeft().toDouble()
-        val top = component.getTop().toDouble()
-        val right = component.getRight().toDouble()
-        val bottom = component.getBottom().toDouble()
-
-        setupDraw()
-        val graphics = UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_COLOR)
-        drawVertex(graphics, matrixStack, left, top, Color(0, 255, 0))
-        drawVertex(graphics, matrixStack, left, bottom, Color(0, 0, 0))
-        drawVertex(graphics, matrixStack, right, bottom, Color(255, 0, 0))
-        drawVertex(graphics, matrixStack, right, top, Color(255, 255, 0))
-        graphics.build()?.drawAndClose(PIPELINE_SATURATION_VALUE_QUAD) {
-            uniform("u_Hue", hue.get())
-        }
-        cleanupDraw()
-    }
-
-    private fun drawAlpha(matrixStack: UMatrixStack, component: UIComponent) {
-        val left = component.getLeft().toDouble()
-        val top = component.getTop().toDouble()
-        val right = component.getRight().toDouble()
-        val bottom = component.getBottom().toDouble()
-
-        setupDraw()
-
-        val graphics = UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_COLOR)
-        drawVertex(graphics, matrixStack, left, top, currentColorState.get().toColor().withAlpha(0))
-        drawVertex(graphics, matrixStack, left, bottom, currentColorState.get().toColor().withAlpha(0))
-        drawVertex(graphics, matrixStack, right, bottom, currentColorState.get().toColor().withAlpha(255))
-        drawVertex(graphics, matrixStack, right, top, currentColorState.get().toColor().withAlpha(255))
-        graphics.build()?.drawAndClose(PIPELINE)
-        cleanupDraw()
-    }
-
-    private fun drawHueLine(matrixStack: UMatrixStack, component: UIComponent) {
-        val left = component.getLeft().toDouble()
-        val top = component.getTop().toDouble()
-        val right = component.getRight().toDouble()
-        val height = component.getHeight().toDouble()
-
-        setupDraw()
-        val graphics = UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_COLOR)
-
-        var first = true
-        for ((i, color) in hueColorList.withIndex()) {
-            val yPos = top + (i.toFloat() * height / hueSaturationSide)
-            if (!first) {
-                drawVertex(graphics, matrixStack, left, yPos, color)
-                drawVertex(graphics, matrixStack, right, yPos, color)
-            }
-
-            drawVertex(graphics, matrixStack, right, yPos, color)
-            drawVertex(graphics, matrixStack, left, yPos, color)
-
-            first = false
-        }
-
-        graphics.build()?.drawAndClose(PIPELINE)
-        cleanupDraw()
-    }
-
-    private fun setupDraw() {
-        UGraphics.shadeModel(GL11.GL_SMOOTH)
-    }
-
-    private fun cleanupDraw() {
-        UGraphics.shadeModel(GL11.GL_FLAT)
-    }
-
-    private fun drawVertex(graphics: UVertexConsumer, matrixStack: UMatrixStack, x: Double, y: Double, color: Color) {
-        graphics
-            .pos(matrixStack, x, y, 0.0)
-            .color(
-                color.red.toFloat() / 255f,
-                color.green.toFloat() / 255f,
-                color.blue.toFloat() / 255f,
-                color.alpha.toFloat() / 255f
-            )
-            .endVertex()
-    }
-
     private fun createMouseDragListener(component: UIComponent): State<Pair<Float, Float>> {
         var mouseHeld = false
         val basicState = BasicState(0f to 0f)
@@ -583,53 +520,6 @@ class ScreenshotColorPicker(
     }
 
     companion object {
-        private val PIPELINE = URenderPipeline.builderWithDefaultShader(
-            "essential:screenshot_picker",
-            UGraphics.DrawMode.QUADS,
-            UGraphics.CommonVertexFormats.POSITION_COLOR,
-        ).apply {
-            blendState = BlendState.NORMAL
-        }.build()
-
-        private val PIPELINE_SATURATION_VALUE_QUAD = run {
-            @Language("GLSL")
-            val vertSource = """
-                #version 110
-                
-                void main() {
-                    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
-                    gl_FrontColor = gl_Color;
-                }
-            """.trimIndent()
-            @Language("GLSL")
-            val fragSource = """
-                #version 110
-                
-                uniform float u_Hue;
-                
-                // From https://stackoverflow.com/a/17897228 (Licence: WTFPL)
-                // All components are in the range [0…1], including hue.
-                vec3 hsv2rgb(vec3 c) {
-                    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-                    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-                    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-                }
-                
-                void main() {
-                    vec3 hsv = vec3(u_Hue, gl_Color.r, gl_Color.g);
-                    gl_FragColor = vec4(hsv2rgb(hsv), 1.0);
-                }
-            """.trimIndent()
-            URenderPipeline.builderWithLegacyShader(
-                "essential:screenshot_color_picker_saturation_value",
-                UGraphics.DrawMode.QUADS,
-                UGraphics.CommonVertexFormats.POSITION_COLOR,
-                vertSource,
-                fragSource,
-            ).build()
-        }
-
-
         private val editorStateFile = platform.essentialBaseDir / "screenshot-editor.json"
 
         private val DEFAULT_COLORS = listOf(HSBColor(0xD32121), HSBColor(0xEAB600), HSBColor(0x3B8A2F), HSBColor(0x0085FF), HSBColor(0x000000))

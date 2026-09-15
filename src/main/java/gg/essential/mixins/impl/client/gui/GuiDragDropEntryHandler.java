@@ -12,18 +12,24 @@
 package gg.essential.mixins.impl.client.gui;
 
 import gg.essential.Essential;
-import gg.essential.elementa.ElementaVersion;
-import gg.essential.elementa.components.UIBlock;
-import gg.essential.elementa.components.Window;
-import gg.essential.elementa.constraints.PixelConstraint;
-import gg.essential.elementa.state.BasicState;
+import gg.essential.elementa.renderer.ElementaExtractor;
 import gg.essential.elementa.utils.TriConsumer;
 import gg.essential.event.gui.GuiDrawScreenEvent;
 import gg.essential.event.gui.GuiMouseReleaseEvent;
-import gg.essential.gui.effects.AlphaEffect;
+import gg.essential.universal.UGraphics;
 import gg.essential.universal.UMath;
 import gg.essential.universal.UMatrixStack;
+import gg.essential.universal.UResolution;
 import gg.essential.universal.USound;
+import gg.essential.universal.render.UGpuDevice;
+import gg.essential.universal.render.UGpuFormat;
+import gg.essential.universal.render.UGpuSampler;
+import gg.essential.universal.render.UGpuTexture;
+import gg.essential.universal.render.UGpuTextureView;
+import gg.essential.util.EssentialGuiExtensionsKt;
+import gg.essential.util.McElementaExtractor;
+import gg.essential.util.UDrawContext;
+import kotlin.Unit;
 import me.kbrewster.eventbus.Subscribe;
 import net.minecraft.client.gui.GuiMultiplayer;
 import net.minecraft.client.gui.GuiScreen;
@@ -36,9 +42,11 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 //#if MC>=12106
-//$$ import gg.essential.util.AdvancedDrawContext;
 //$$ import net.minecraft.client.gui.render.state.GuiRenderState;
-//$$ import static gg.essential.util.RenderGuiRenderStateToRenderTargetKt.renderGuiRenderStateToRenderTarget;
+//$$ import static gg.essential.util.RenderGuiRenderStateToRenderTargetKt.renderGuiRenderStateToTexture;
+//#else
+import gg.essential.util.DrawFramebufferContext;
+import static gg.essential.util.GuiRenderSetupKt.withDefaultMcGuiRenderingSetup;
 //#endif
 
 //#if MC>=12004
@@ -68,10 +76,12 @@ import net.minecraft.client.resources.ResourcePackListEntryDefault;
 //#endif
 
 import java.awt.*;
+import java.io.IOException;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
+import static gg.essential.elementa.renderer.ElementaExtractorKt.fillMcScale;
 
 public class
         //#if MC>=11904
@@ -85,9 +95,10 @@ public class
     private final E indicatorEntry;
     private final GuiScreen screen;
 
-    // drawing elements
-    private final AlphaEffect alphaEffect = new AlphaEffect(new BasicState<>(0.7f));
-    private final UIBlock alphaBlock = new UIBlock();
+    private UGpuTextureView tmpColorTextureView;
+    //#if MC < 1.21.6
+    private UGpuTextureView tmpDepthTextureView;
+    //#endif
 
     // actions sent by screen mixins
     private final Consumer<ScreenPosition> indicatorPositionUpdater;
@@ -119,11 +130,6 @@ public class
         this.screen = screen;
         this.onRevertedDrag = onRevertedDrag;
         this.runToUnselectEntries = runToUnselectEntries;
-
-        // assign dummy parent to drawing element and bind to alpha effect
-        alphaBlock.setParent(new Window(ElementaVersion.V10));
-        alphaEffect.bindComponent(alphaBlock);
-        alphaEffect.setup();
 
         // actions for event listeners
         this.draggedEntryDrawAction = draggedEntryDrawAction;
@@ -173,6 +179,27 @@ public class
             revertDraggedEntryToOriginalContainer(list, otherList);
         }
         Essential.EVENT_BUS.unregister(this);
+
+        closeTmpTextures();
+    }
+
+    private void closeTmpTextures() {
+        try {
+            if (tmpColorTextureView != null) {
+                tmpColorTextureView.close();
+                tmpColorTextureView.getTexture().close();
+                tmpColorTextureView = null;
+            }
+            //#if MC < 1.21.6
+            if (tmpDepthTextureView != null) {
+                tmpDepthTextureView.close();
+                tmpDepthTextureView.getTexture().close();
+                tmpDepthTextureView = null;
+            }
+            //#endif
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public boolean isIndicatorEntry(Object entry) {
@@ -289,21 +316,32 @@ public class
             y2 = y2Bound;
         }
 
-        drawDraggedEntry(event, width, height, padUIBlockWidth, padEntryRenderWidth, x, y, x2, y2);
+        drawDraggedEntry(event, width, height, padEntryRenderWidth, x, y, x2, y2);
     }
 
-    private void drawDraggedEntry(GuiDrawScreenEvent event, int width, int height, int padUIBlockWidth, int padEntryRenderWidth, int x, int y, int x2, int y2) {
+    private void drawDraggedEntry(GuiDrawScreenEvent event, int width, int height, int padEntryRenderWidth, int x, int y, int x2, int y2) {
         ScreenPosition newDragCenter = new ScreenPosition(x + width / 2.0, y + height / 2.0);
         boolean posChanged = draggedEntryState.updatePos(newDragCenter);
 
-        //#if MC>=12106
-        //$$ AdvancedDrawContext.INSTANCE.drawImmediate(event.getDrawContext().getMc(), matrixStack -> {
-        //$$     doDrawDraggedEntry(matrixStack, event, width, height, padUIBlockWidth, padEntryRenderWidth, x, y, x2, y2);
-        //$$     return kotlin.Unit.INSTANCE;
-        //$$ });
-        //#else
-        doDrawDraggedEntry(event.getMatrixStack(), event, width, height, padUIBlockWidth, padEntryRenderWidth, x, y, x2, y2);
-        //#endif
+        UGpuTextureView textureView = doDrawDraggedEntryToTexture(event.getMatrixStack(), event, width + padEntryRenderWidth, height, x, y, x2, y2);
+
+        McElementaExtractor extractor = new McElementaExtractor(event.getDrawContext());
+        extractor.blit(
+            0,
+            0,
+            UResolution.getViewportWidth(),
+            UResolution.getViewportHeight(),
+            0f,
+            1f,
+            1f,
+            0f,
+            textureView,
+            EssentialGuiExtensionsKt.getNEAREST(UGpuSampler.Companion),
+            false,
+            true,
+            new Color(0.7f, 0.7f, 0.7f, 0.7f)
+        );
+        extractor.close();
 
         // trigger indicator update if necessary, ready for next draw
         if (posChanged) {
@@ -312,25 +350,65 @@ public class
         }
     }
 
-    private void doDrawDraggedEntry(UMatrixStack matrixStack, GuiDrawScreenEvent event, int width, int height, int padUIBlockWidth, int padEntryRenderWidth, int x, int y, int x2, int y2) {
-        // alpha effect to surround vanilla component rendering
-        setUIBlockConstraints(alphaBlock, (float) (x - 2), (float) (y - 2), (float) (x + width - 8 + padUIBlockWidth), (float) (y + height + 2));
-        alphaEffect.beforeDraw(matrixStack);
+    private UGpuTextureView doDrawDraggedEntryToTexture(UMatrixStack matrixStack, GuiDrawScreenEvent event, int width, int height, int x, int y, int x2, int y2) {
+        UGpuDevice device = UGraphics.getDevice();
+        int textureWidth = UResolution.getViewportWidth();
+        int textureHeight = UResolution.getViewportHeight();
+        if (tmpColorTextureView != null && (tmpColorTextureView.getTexture().getWidth() != textureWidth || tmpColorTextureView.getTexture().getHeight() != textureHeight)) {
+            closeTmpTextures();
+        }
+        if (tmpColorTextureView == null) {
+            tmpColorTextureView = device.createTextureView(device.createTexture(
+                "Drag&Drop Entry - Color",
+                UGpuTexture.Usage.Companion.getCOPY_DST().plus(UGpuTexture.Usage.Companion.getRENDER_ATTACHMENT()).plus(UGpuTexture.Usage.Companion.getTEXTURE_BINDING()),
+                UGpuFormat.Companion.getDEFAULT_RGBA(),
+                textureWidth,
+                textureHeight,
+                1
+            ), 0, 1);
+        }
+        device.clearColor(tmpColorTextureView.getTexture(), 0f, 0f, 0f, 0f);
+        //#if MC < 1.21.6
+        if (tmpDepthTextureView == null) {
+            tmpDepthTextureView = device.createTextureView(device.createTexture(
+                "Drag&Drop Entry - Depth",
+                UGpuTexture.Usage.Companion.getCOPY_DST().plus(UGpuTexture.Usage.Companion.getRENDER_ATTACHMENT()).plus(UGpuTexture.Usage.Companion.getTEXTURE_BINDING()),
+                UGpuFormat.Companion.getDEFAULT_DEPTH(),
+                textureWidth,
+                textureHeight,
+                1
+            ), 0, 1);
+        }
+        device.clearDepth(tmpDepthTextureView.getTexture(), 1f);
+        //#endif
 
-        Color backgroundColor = new Color(138, 178, 255, 72);
-        Color outlineColor = new Color(229, 229, 229, 255);
-        renderBackgroundWithBorder(width, height, padUIBlockWidth, x, y, x2, y2, matrixStack, backgroundColor, outlineColor);
-
-        width += padEntryRenderWidth;
-
-        // entry
-        //#if MC>=12106
+        //#if MC >= 1.21.6
         //$$ GuiRenderState guiRenderState = new GuiRenderState();
+        //#else
+        DrawFramebufferContext drawFramebufferContext = new DrawFramebufferContext();
+        drawFramebufferContext.withDrawFramebuffer(tmpColorTextureView, tmpDepthTextureView, () -> {
+            withDefaultMcGuiRenderingSetup(textureWidth, textureHeight, UResolution.getScaleFactor(), () -> {
+        //#endif
+
+        //#if MC>=12106
         //$$ DrawContext context = new DrawContext(MinecraftClient.getInstance(), guiRenderState
             //#if MC>=12111
             //$$ , event.getMouseX(), event.getMouseY()
             //#endif
         //$$ );
+        //#elseif MC >= 1.20
+        //$$ DrawContext context = event.getDrawContext().getMc();
+        //#endif
+
+        //#if MC >= 1.20
+        //$$ McElementaExtractor extractor = new McElementaExtractor(new UDrawContext(context, new UMatrixStack(context.getMatrices())));
+        //#else
+        McElementaExtractor extractor = new McElementaExtractor(new UDrawContext(matrixStack));
+        //#endif
+        renderBackgroundWithBorder(extractor, x, y, x2, y2);
+        extractor.close();
+
+        //#if MC>=1.21.6
         //#if MC>=12109
         //$$ int orgX = draggedEntryState.entry.getX();
         //$$ int orgY = draggedEntryState.entry.getY();
@@ -348,18 +426,8 @@ public class
         //#else
         //$$ draggedEntryState.entry.render(context, 0, y, x, width, height, event.getMouseX(), event.getMouseY(), true, event.getPartialTicks());
         //#endif
-        //#if MC >= 26.1
-        //$$ context.extractDeferredElements(event.getMouseX(), event.getMouseY(), event.getPartialTicks());
-        //#elseif MC>=12111
-        //$$ context.drawDeferredElements();
-        //#endif
-        //$$ renderGuiRenderStateToRenderTarget(matrixStack, guiRenderState);
         //#elseif MC>=12000
-        //$$ DrawContext context = event.getDrawContext().getMc();
         //$$ draggedEntryState.entry.render(context, 0, y, x, width, height, event.getMouseX(), event.getMouseY(), true, event.getPartialTicks());
-        //$$
-        //$$ // flush the vanilla vertex buffer to ensure the OpenGL call is made for alphaEffect use
-        //$$ context.draw();
         //#elseif MC>=11600
         //$$ // added matrixStack and also x and y are swapped
         //$$ draggedEntryState.entry.render(matrixStack.toMC(), 0, y, x, width, height, event.getMouseX(), event.getMouseY(), true, event.getPartialTicks());
@@ -370,18 +438,38 @@ public class
         //$$ draggedEntryState.entry.drawEntry(0, x, y, width, height, event.getMouseX(), event.getMouseY(), true);
         //#endif
 
-        alphaEffect.afterDraw(matrixStack);
+        //#if MC >= 1.21.6
+        //#if MC >= 26.1
+        //$$ context.extractDeferredElements(event.getMouseX(), event.getMouseY(), event.getPartialTicks());
+        //#elseif MC >= 1.21.11
+        //$$ context.drawDeferredElements();
+        //#endif
+        //$$ renderGuiRenderStateToTexture(guiRenderState, tmpColorTextureView);
+        //#else
+                //#if MC >= 1.20
+                //$$ // flush the vanilla vertex buffer to ensure the actual OpenGL call is made
+                //$$ context.draw();
+                //#endif
+                return Unit.INSTANCE;
+            });
+            return Unit.INSTANCE;
+        });
+        //#endif
+        return tmpColorTextureView;
     }
 
-    private static void renderBackgroundWithBorder(final int width, final int height, final int padWidth, final int x, final int y, final int x2, final int y2, final UMatrixStack matrixStack, final Color backgroundColor, final Color outlineColor) {
+    private static void renderBackgroundWithBorder(ElementaExtractor extractor, final int x, final int y, final int x2, final int y2) {
+        Color backgroundColor = new Color(138, 178, 255, 72);
+        Color outlineColor = new Color(229, 229, 229, 255);
+
         // background
-        UIBlock.Companion.drawBlock(matrixStack, backgroundColor, x - 1, y - 1, x + width - 9 + padWidth, y + height + 1);
+        fillMcScale(extractor, x - 1, y - 1, x2 - 1, y2 - 1, backgroundColor);
 
         // outline
-        UIBlock.Companion.drawBlock(matrixStack, outlineColor, x - 1, y - 2, x2 - 1, y - 1);
-        UIBlock.Companion.drawBlock(matrixStack, outlineColor, x - 1, y2 - 1, x2 - 1, y2);
-        UIBlock.Companion.drawBlock(matrixStack, outlineColor, x - 2, y - 2, x - 1, y2);
-        UIBlock.Companion.drawBlock(matrixStack, outlineColor, x2 - 1, y - 2, x2, y2);
+        fillMcScale(extractor, x - 1, y - 2, x2 - 1, y - 1, outlineColor);
+        fillMcScale(extractor, x - 1, y2 - 1, x2 - 1, y2, outlineColor);
+        fillMcScale(extractor, x - 2, y - 2, x - 1, y2, outlineColor);
+        fillMcScale(extractor, x2 - 1, y - 2, x2, y2, outlineColor);
     }
 
     /**
@@ -471,13 +559,6 @@ public class
 
     private float scrollFractionalTally = 0;
     //#endif
-
-    private void setUIBlockConstraints(UIBlock block, final float x, final float y, final float x2, final float y2) {
-        block.setX(new PixelConstraint(x, false, false));
-        block.setY(new PixelConstraint(y, false, false));
-        block.setWidth(new PixelConstraint(x2 - x, false, false));
-        block.setHeight(new PixelConstraint(y2 - y, false, false));
-    }
 
     /**
      * if the dragged entry originated from the non reordering list simply leave its original slot waiting for it

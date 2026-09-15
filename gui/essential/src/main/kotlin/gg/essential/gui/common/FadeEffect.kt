@@ -13,6 +13,8 @@ package gg.essential.gui.common
 
 import gg.essential.elementa.components.UIBlock
 import gg.essential.elementa.effects.Effect
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.fillMcScale
 import gg.essential.elementa.state.BasicState
 import gg.essential.elementa.state.State
 import gg.essential.elementa.utils.withAlpha
@@ -31,9 +33,10 @@ class FadeEffect(val backgroundColor: State<Color>, val alpha: Float) : Effect()
 
     constructor(backgroundColor: Color, alpha: Float) : this(BasicState(backgroundColor), alpha)
 
-    override fun beforeDraw(matrixStack: UMatrixStack) {
-    }
-
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Use `extract` instead.",
+        replaceWith = ReplaceWith("extractAfter(extractor)")
+    )
     override fun afterDraw(matrixStack: UMatrixStack) {
         val x = boundComponent.getLeft().toDouble()
         val y = boundComponent.getTop().toDouble()
@@ -41,5 +44,15 @@ class FadeEffect(val backgroundColor: State<Color>, val alpha: Float) : Effect()
         val y2 = boundComponent.getBottom().toDouble()
 
         UIBlock.drawBlock(matrixStack, backgroundColor.get().withAlpha(1f - alpha), x, y, x2, y2)
+    }
+
+    override fun extractAfter(extractor: ElementaExtractor) {
+        extractor.fillMcScale(
+            boundComponent.getLeft(),
+            boundComponent.getTop(),
+            boundComponent.getRight(),
+            boundComponent.getBottom(),
+            backgroundColor.get().withAlpha(1f - alpha),
+        )
     }
 }

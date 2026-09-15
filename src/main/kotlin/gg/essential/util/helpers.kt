@@ -203,7 +203,13 @@ fun addEssentialResourcePack(consumer: Consumer<IResourcePack>) {
 
     val pack = when (val source = findCodeSource(Essential::class.java)) {
         is CodeSource.Jar -> {
-            //#if MC>=12005
+            //#if MC >= 26.3
+            //$$ val supplier = FilePackResources.FileResourcesSupplier(source.path.toFile())
+            //$$ val packType = net.minecraft.server.packs.PackType.CLIENT_RESOURCES
+            //$$ val version = net.minecraft.SharedConstants.getCurrentVersion().packVersion(packType)
+            //$$ val metadata = net.minecraft.server.packs.repository.Pack.readPackMetadata(info, supplier, version, packType)
+            //$$ supplier.openResources(info, metadata!!).findFirst().get()
+            //#elseif MC>=12005
             //$$ ZipResourcePack.ZipBackedFactory(source.path.toFile()).open(info)
             //#elseif MC>=12002
             //$$ ZipResourcePack.ZipBackedFactory(source.path.toFile(), true).open("essential")
@@ -497,7 +503,7 @@ val essentialUriListener: EssentialMarkdown.(EssentialMarkdown.LinkClickEvent) -
                                     GuiOptions(
                                         UScreen.currentScreen!!,
                                         UMinecraft.getSettings(),
-                                        //#if MC >= 26.1
+                                        //#if MC >= 26.1 && MC < 26.3
                                         //$$ UMinecraft.getWorld() != null,
                                         //#endif
                                     )

@@ -11,6 +11,7 @@
  */
 package gg.essential.gui.elementa.essentialmarkdown.drawables
 
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.elementa.essentialmarkdown.DrawState
 import gg.essential.gui.elementa.essentialmarkdown.EssentialMarkdown
 import gg.essential.gui.elementa.essentialmarkdown.selection.Cursor
@@ -108,8 +109,13 @@ class DrawableList(
 
     override fun cursorAtEnd() = drawables.last().cursorAtEnd()
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
     override fun draw(matrixStack: UMatrixStack, state: DrawState) {
         forEach { it.drawCompat(matrixStack, state) }
+    }
+
+    override fun extract(extractor: ElementaExtractor, state: DrawState) {
+        forEach { it.extract(extractor, state) }
     }
 
     override fun selectedText(asMarkdown: Boolean): String {

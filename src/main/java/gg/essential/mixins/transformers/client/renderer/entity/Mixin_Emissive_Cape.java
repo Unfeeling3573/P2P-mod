@@ -50,7 +50,11 @@ public abstract class Mixin_Emissive_Cape {
 
     //#if MC>=12109
     //$$ private static final String RENDER_LAYER = "render(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;ILnet/minecraft/client/render/entity/state/PlayerEntityRenderState;FF)V";
+    //#if MC >= 26.3
+    //$$ private static final String RENDER_CAPE = "Lnet/minecraft/client/renderer/SubmitNodeCollector;submitModel(Lnet/minecraft/client/model/Model;Ljava/lang/Object;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/rendertype/RenderType;III)V";
+    //#else
     //$$ private static final String RENDER_CAPE = "Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;submitModel(Lnet/minecraft/client/model/Model;Ljava/lang/Object;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/RenderLayer;IIILnet/minecraft/client/render/command/ModelCommandRenderer$CrumblingOverlayCommand;)V";
+    //#endif
     //#elseif MC>=12102
     //$$ private static final String RENDER_LAYER = "render(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumerProvider;ILnet/minecraft/client/render/entity/state/PlayerEntityRenderState;FF)V";
     //$$ private static final String RENDER_CAPE = "Lnet/minecraft/client/render/entity/model/BipedEntityModel;render(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumer;II)V";
@@ -84,7 +88,9 @@ public abstract class Mixin_Emissive_Cape {
         //$$ int overlay,
         //#if MC>=12109
         //$$ int outlineColor,
+        //#if MC < 26.3
         //$$ ModelCommandRenderer.CrumblingOverlayCommand crumblingOverlay,
+        //#endif
         //#endif
         //#else
         float scale,
@@ -124,7 +130,9 @@ public abstract class Mixin_Emissive_Cape {
             //#endif
             //#if MC>=12109
             //$$ , outlineColor
+            //#if MC < 26.3
             //$$ , crumblingOverlay
+            //#endif
             //#endif
         );
 
@@ -149,8 +157,10 @@ public abstract class Mixin_Emissive_Cape {
         //$$     MinecraftRenderBackend.INSTANCE.getEmissiveLayer(emissiveTexture),
         //$$     light,
         //$$     overlay,
-        //$$     outlineColor,
-        //$$     crumblingOverlay
+        //$$     outlineColor
+            //#if MC < 26.3
+            //$$ , crumblingOverlay
+            //#endif
         //$$ );
         //#elseif MC>=11400
         //$$ original.call(

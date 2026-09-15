@@ -11,6 +11,8 @@
  */
 package gg.essential.gui.proxies
 
+import gg.essential.Essential
+import gg.essential.event.render.RenderTickEvent
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
 import gg.essential.universal.UResolution
@@ -19,7 +21,6 @@ import gg.essential.util.UDrawContext
 import java.awt.Color
 import net.minecraft.client.gui.render.state.GuiRenderState
 import gg.essential.universal.UMinecraft
-import gg.essential.util.AdvancedDrawContext
 import gg.essential.util.renderGuiRenderStateToTexture
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gl.RenderPipelines
@@ -29,8 +30,15 @@ import net.minecraft.util.Identifier
 import gg.essential.gui.proxies.TintVanillaButtonsEffectShared.*
 import gg.essential.gui.proxies.TintVanillaButtonsEffectShared.Companion.NON_WHITE_TINT_PIPELINE
 import gg.essential.gui.proxies.TintVanillaButtonsEffectShared.Companion.averageButtonColor
+import gg.essential.universal.render.SharedIndexBuffers
+import gg.essential.universal.render.UGpuBuffer
+import gg.essential.universal.render.UGpuFormat
 import gg.essential.universal.render.UGpuSampler
+import gg.essential.universal.render.UGpuTexture
+import gg.essential.universal.render.UGpuTextureView
+import gg.essential.universal.render.URenderPassDescriptor
 import gg.essential.util.NEAREST
+import me.kbrewster.eventbus.Subscribe
 
 /**
  * 1.21.6+ implementation of tinting our vanilla proxy buttons.
@@ -78,7 +86,7 @@ class TintVanillaButtonsEffect {
             //$$ 0, 0, // mouse pos for tooltips, which our scheme doesn't support anyway
             //#endif
         )
-        private val texture = AdvancedDrawContext.textureAllocator.allocate(pageWidth, pageHeight)
+        private val texture = TemporaryTextureAllocator.allocate(pageWidth, pageHeight)
 
         // List of free spaces in this page, initialized with the full page size
         private val freeSpaces = mutableListOf(Rect(0, 0, pageWidth, pageHeight))
@@ -105,8 +113,9 @@ class TintVanillaButtonsEffect {
                 return
             }
 
-            AdvancedDrawContext.drawToTexture(texture) { stack ->
-                UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_TEXTURE_COLOR).also { buffer ->
+            val device = UGraphics.getDevice()
+            val vertexBuffer = UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_TEXTURE_COLOR)
+                .also { buffer ->
                     for (rectGL in placedRects) {
                         // parse the rectangle to OpenGL UV coordinates
                         val u = rectGL.x / pageWidth.toDouble()
@@ -114,22 +123,38 @@ class TintVanillaButtonsEffect {
                         val u2 = (rectGL.x + rectGL.width) / pageWidth.toDouble()
                         val v2 = (pageHeight - rectGL.y) / pageHeight.toDouble()
 
-                        // convert to MC coordinates scaling required by the AdvancedDrawContext projection matrix
-                        val rect = rectGL.toMC()
+                        val rect = rectGL
                         val x = rect.x.toDouble()
                         val y = rect.y.toDouble()
                         val x2 = (rect.x + rect.width).toDouble()
                         val y2 = (rect.y + rect.height).toDouble()
 
                         // add the quad to the buffer with the tint color
-                        buffer.pos(stack, x, y2, 0.0).tex(u, v).color(rect.color).endVertex()
-                        buffer.pos(stack, x2, y2, 0.0).tex(u2, v).color(rect.color).endVertex()
-                        buffer.pos(stack, x2, y, 0.0).tex(u2, v2).color(rect.color).endVertex()
-                        buffer.pos(stack, x, y, 0.0).tex(u, v2).color(rect.color).endVertex()
+                        buffer.pos(UMatrixStack.UNIT, x, y2, 0.0).tex(u, v).color(rect.color).endVertex()
+                        buffer.pos(UMatrixStack.UNIT, x2, y2, 0.0).tex(u2, v).color(rect.color).endVertex()
+                        buffer.pos(UMatrixStack.UNIT, x2, y, 0.0).tex(u2, v2).color(rect.color).endVertex()
+                        buffer.pos(UMatrixStack.UNIT, x, y, 0.0).tex(u, v2).color(rect.color).endVertex()
                     }
-                }.build()?.drawAndClose(NON_WHITE_TINT_PIPELINE) {
-                    texture("u_Button", drawnPageTexture.ucView, UGpuSampler.NEAREST)
-                    uniform("u_AverageColor", averageCol.red / 255F, averageCol.green / 255F, averageCol.blue / 255F)
+                }
+                .build()!!
+                .use { device.createBuffer(UGpuBuffer.Usage.VERTEX, it.toByteBuffer()) }
+            vertexBuffer.use { vertexBuffer ->
+                val (indexBuffer, indexType) = SharedIndexBuffers.quads(placedRects.size * 4)
+                val descriptor = URenderPassDescriptor { "TintVanillaButtonsEffect" }
+                    .withColorAttachment(texture, null)
+                device.createRenderPass(descriptor).use { renderPass ->
+                    renderPass.projectionMatrix(floatArrayOf(
+                        2f/pageWidth, 0f,             0f, 0f,
+                        0f,           -2f/pageHeight, 0f, 0f,
+                        0f,           0f,             1f, 0f,
+                        -1f,          1f,             0f, 1f,
+                    ))
+                    renderPass.pipeline(NON_WHITE_TINT_PIPELINE)
+                    renderPass.texture("u_Button", drawnPageTexture.ucView, UGpuSampler.NEAREST)
+                    renderPass.uniform("u_AverageColor", averageCol.red / 255F, averageCol.green / 255F, averageCol.blue / 255F)
+                    renderPass.vertexBuffer(0, vertexBuffer.slice())
+                    renderPass.indexBuffer(indexBuffer, indexType)
+                    renderPass.drawIndexed(placedRects.size * 6)
                 }
             }
 
@@ -180,7 +205,7 @@ class TintVanillaButtonsEffect {
                 val identifier = Identifier.of("essential", "__tmp_texture__tint_vanilla_buttons_effect")
                 textureManager.registerTexture(identifier, object : AbstractTexture() {
                     init {
-                        glTextureView = this@Page.texture.textureView
+                        glTextureView = UGraphics.getPlatformAdapter().textureView(this@Page.texture)
                     }
 
                     override fun close() {} // we don't want the later `destroyTexture` to close our texture
@@ -280,6 +305,63 @@ class TintVanillaButtonsEffect {
                 val page = rootPage ?: return
                 rootPage = null
                 page.finalizeAndTintPage()
+            }
+        }
+    }
+
+    private object TemporaryTextureAllocator {
+        // When we allocate a texture, we need to hold on to it until the next frame so MC's gui renderer can use it
+        private val usedAllocations = mutableListOf<UGpuTextureView>()
+        // We hold on to it for an additionally frame so we can re-use it instead of having to re-allocate one each frame
+        private val reusableAllocations = mutableListOf<UGpuTextureView>()
+
+        private var registered = false
+
+        fun allocate(width: Int, height: Int): UGpuTextureView {
+            val device = UGraphics.getDevice()
+
+            var allocation = reusableAllocations.removeLastOrNull()
+
+            if (allocation != null && (allocation.texture.width != width || allocation.texture.height != height)) {
+                allocation.close()
+                allocation.texture.close()
+                allocation = null
+            }
+
+            if (allocation == null) {
+                allocation = device.createTextureView(device.createTexture(
+                    "Tinted vanilla buttons",
+                    UGpuTexture.Usage.COPY_DST + UGpuTexture.Usage.RENDER_ATTACHMENT + UGpuTexture.Usage.TEXTURE_BINDING,
+                    UGpuFormat.DEFAULT_RGBA,
+                    width,
+                    height,
+                ))
+            }
+
+            device.clearColor(allocation.texture, 0f, 0f, 0f, 0f)
+
+            usedAllocations.add(allocation)
+
+            if (!registered) {
+                registered = true
+                Essential.EVENT_BUS.register(this)
+            }
+
+            return allocation
+        }
+
+        @Subscribe
+        fun nextFrame(event: RenderTickEvent) {
+            if (!event.isPre) return
+
+            reusableAllocations.forEach { it.close(); it.texture.close() }
+            reusableAllocations.clear()
+            reusableAllocations.addAll(usedAllocations)
+            usedAllocations.clear()
+
+            if (reusableAllocations.isEmpty()) {
+                registered = false
+                Essential.EVENT_BUS.unregister(this)
             }
         }
     }

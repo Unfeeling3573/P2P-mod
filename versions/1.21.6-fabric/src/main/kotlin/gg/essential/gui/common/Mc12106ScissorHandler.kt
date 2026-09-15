@@ -9,6 +9,7 @@
  * commercialize, or otherwise exploit, or create derivative works based
  * upon, this file or any other in this repository, all of which is reserved by Essential.
  */
+// Only on 1.21.6 - 26.2
 package gg.essential.gui.common
 
 import com.mojang.blaze3d.buffers.GpuBufferSlice

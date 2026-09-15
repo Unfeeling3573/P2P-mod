@@ -14,8 +14,8 @@ package gg.essential.mixins.transformers.server;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.llamalad7.mixinextras.sugar.Share;
 import com.llamalad7.mixinextras.sugar.ref.LocalBooleanRef;
-import gg.essential.Essential;
-import gg.essential.network.connectionmanager.sps.SPSManager;
+import gg.essential.mixins.ext.server.integrated.IntegratedServerExt;
+import gg.essential.sps.McIntegratedServerManager;
 import net.minecraft.server.MinecraftServer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -50,8 +50,10 @@ public abstract class Mixin_MinecraftServer_FixStatusEquality {
     private Random modifyPlayerSampleIndexRandom(Random original, @Share("hosting") LocalBooleanRef hostingRef) {
 
         // establish if we are hosting via essential
-        SPSManager spsManager = Essential.getInstance().getConnectionManager().getSpsManager();
-        hostingRef.set(spsManager.getLocalSession() != null);
+        MinecraftServer $this = (MinecraftServer) (Object) this;
+        if (!($this instanceof IntegratedServerExt)) return original;
+        McIntegratedServerManager manager = ((IntegratedServerExt) $this).getEssential$manager();
+        hostingRef.set(manager != null && manager.getAppliedOpenToLan());
 
         if (!hostingRef.get()) return original;
 

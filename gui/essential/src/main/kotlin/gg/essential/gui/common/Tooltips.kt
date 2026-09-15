@@ -18,7 +18,9 @@ import gg.essential.elementa.constraints.ChildBasedMaxSizeConstraint
 import gg.essential.elementa.constraints.ChildBasedSizeConstraint
 import gg.essential.elementa.constraints.SiblingConstraint
 import gg.essential.elementa.dsl.*
-import gg.essential.elementa.effects.OutlineEffect
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
+import gg.essential.elementa.renderer.fillMcScale
 import gg.essential.elementa.state.BasicState
 import gg.essential.elementa.state.State
 import gg.essential.elementa.state.toConstraint
@@ -59,16 +61,64 @@ abstract class AbstractTooltip(private val logicalParent: UIComponent) : UIConta
         return this
     }
 
-    fun showTooltip(delayed: Boolean = true) {
-        if (delayed) {
-            return Window.enqueueRenderOperation { showTooltip(delayed = false) }
+    /** What the user requested by calling [showTooltip]/[hideTooltip] or via [bindVisibility]. */
+    private var requestedVisible = false
+    /** Whether this [AbstractTooltip] is currently mounted in the [Window]. */
+    private var isTooltipMounted = false
+    /** Whether [updateFunc] is currently mounted in [logicalParent]. See [updateFunc] docs. */
+    private var isUpdateFuncMounted = false
+
+    fun showTooltip() {
+        requestedVisible = true
+        Window.enqueueRenderOperation { updateMountState() }
+    }
+
+    fun hideTooltip() {
+        requestedVisible = false
+        Window.enqueueRenderOperation { updateMountState() }
+    }
+
+    private fun updateMountState() {
+        if (requestedVisible) {
+            val isParentMounted = logicalParent.isInComponentTree()
+            if (isParentMounted) {
+                if (!isTooltipMounted) mountTooltip()
+                if (isUpdateFuncMounted) unmountUpdateFunc()
+            } else {
+                if (isTooltipMounted) unmountTooltip()
+                if (!isUpdateFuncMounted) mountUpdateFunc()
+            }
+        } else {
+            if (isUpdateFuncMounted) unmountUpdateFunc()
+            if (isTooltipMounted) unmountTooltip()
         }
+    }
+
+    /**
+     * When the [logicalParent] is not yet (or currently) in a [Window], we register this [UpdateFunc] on it to get
+     * notified once it is mounted, so we can then mount the tooltip.
+     */
+    private val updateFunc: UpdateFunc = { _, _ ->
+        updateMountState()
+    }
+
+    private fun mountUpdateFunc() {
+        assert(!isUpdateFuncMounted)
+        isUpdateFuncMounted = true
+        logicalParent.addUpdateFunc(updateFunc)
+    }
+
+    private fun unmountUpdateFunc() {
+        assert(isUpdateFuncMounted)
+        isUpdateFuncMounted = false
+        logicalParent.removeUpdateFunc(updateFunc)
+    }
+
+    private fun mountTooltip() {
+        assert(!isTooltipMounted)
+        isTooltipMounted = true
 
         val window = Window.of(logicalParent)
-        if (this in window.children) {
-            return
-        }
-
         window.addChild(this)
 
         // When our logical parent is removed from the component tree, we also need to remove ourselves (our actual
@@ -92,16 +142,15 @@ abstract class AbstractTooltip(private val logicalParent: UIComponent) : UIConta
             parent.onRemoved(listener)
         }
         logicalParent.onRemoved {
-            hideTooltip(delayed = false)
+            updateMountState()
         }
     }
 
-    fun hideTooltip(delayed: Boolean = true) {
-        if (delayed) {
-            return Window.enqueueRenderOperation { hideTooltip(delayed = false) }
-        }
+    private fun unmountTooltip() {
+        assert(isTooltipMounted)
+        isTooltipMounted = false
 
-        val window = Window.ofOrNull(this) ?: return
+        val window = Window.of(this)
 
         window.removeChild(this)
 
@@ -110,14 +159,6 @@ abstract class AbstractTooltip(private val logicalParent: UIComponent) : UIConta
     }
 
     override fun isPointInside(x: Float, y: Float): Boolean = false
-
-    // FIXME This override is a workaround for the tooltip showing while its logical
-    //  parent is hidden. For a more permanent solution, see EM-1213.
-    override fun draw(matrixStack: UMatrixStack) {
-        if (logicalParent.isInComponentTree()) {
-            super.draw(matrixStack)
-        }
-    }
 }
 
 open class LayoutDslTooltip(
@@ -224,8 +265,6 @@ class EssentialTooltip(
     init {
         textColorState.set(EssentialPalette.TEXT_HIGHLIGHT)
 
-        this effect OutlineEffect(EssentialPalette.BLACK, 1f)
-
         constrain {
             width = ChildBasedMaxSizeConstraint() + 8.pixels
             height = ChildBasedSizeConstraint() + 6.pixels
@@ -234,42 +273,48 @@ class EssentialTooltip(
 
     override fun beforeDraw(matrixStack: UMatrixStack) {
         super.beforeDraw(matrixStack)
-
-        // Background
-        UIBlock.drawBlock(
-            matrixStack,
-            EssentialPalette.COMPONENT_BACKGROUND,
-            getLeft().toDouble(),
-            getTop().toDouble(),
-            getRight().toDouble(),
-            getBottom().toDouble(),
-        )
+        extractComponent(ImmediateElementaExtractor(matrixStack))
     }
 
-    override fun afterDraw(matrixStack: UMatrixStack) {
-        val hCenter = ((logicalParent.getLeft() + logicalParent.getRight()) / 2.0).roundToRealPixels()
-        val vCenter = ((logicalParent.getTop() + logicalParent.getBottom()) / 2.0).roundToRealPixels()
+    override fun extractComponent(extractor: ElementaExtractor) {
+        // Background
+        extractor.fillMcScale(
+            getLeft() - 1,
+            getTop() - 1,
+            getRight() + 1,
+            getBottom() + 1,
+            EssentialPalette.BLACK,
+        )
+        extractor.fillMcScale(
+            getLeft(),
+            getTop(),
+            getRight(),
+            getBottom(),
+            EssentialPalette.COMPONENT_BACKGROUND,
+        )
 
-        val left = (getLeft().toDouble() + 1)
-        val right = (getRight().toDouble() - 1)
-        val top = (getTop().toDouble() + 1)
-        val bottom = (getBottom().toDouble() - 1)
+        // Notch
+        val hCenter = ((logicalParent.getLeft() + logicalParent.getRight()) / 2.0f).roundToRealPixels()
+        val vCenter = ((logicalParent.getTop() + logicalParent.getBottom()) / 2.0f).roundToRealPixels()
+
+        val left = getLeft() + 1
+        val right = getRight() - 1
+        val top = getTop() + 1
+        val bottom = getBottom() - 1
 
         for (i in 1..notchSize) {
-            UIBlock.drawBlock(
-                matrixStack,
-                EssentialPalette.BLACK,
+            extractor.fillMcScale(
                 when (position) {
                     Position.LEFT -> right + 1 + i
                     Position.RIGHT -> left - 2 - i
-                    Position.ABOVE -> hCenter - (notchSize - i) - 0.5
-                    Position.BELOW -> hCenter - (notchSize - i) - 0.5
+                    Position.ABOVE -> hCenter - (notchSize - i) - 0.5f
+                    Position.BELOW -> hCenter - (notchSize - i) - 0.5f
                     Position.MOUSE -> continue
                     is Position.MOUSE_OFFSET -> continue
                 },
                 when (position) {
-                    Position.LEFT -> vCenter - (notchSize - i) - 0.5
-                    Position.RIGHT -> vCenter - (notchSize - i) - 0.5
+                    Position.LEFT -> vCenter - (notchSize - i) - 0.5f
+                    Position.RIGHT -> vCenter - (notchSize - i) - 0.5f
                     Position.ABOVE -> bottom + i
                     Position.BELOW -> top - 2 - i
                     Position.MOUSE -> continue
@@ -278,34 +323,33 @@ class EssentialTooltip(
                 when (position) {
                     Position.LEFT -> right + 2 + i
                     Position.RIGHT -> left - 1 - i
-                    Position.ABOVE -> hCenter + (notchSize - i) + 0.5
-                    Position.BELOW -> hCenter + (notchSize - i) + 0.5
+                    Position.ABOVE -> hCenter + (notchSize - i) + 0.5f
+                    Position.BELOW -> hCenter + (notchSize - i) + 0.5f
                     Position.MOUSE -> continue
                     is Position.MOUSE_OFFSET -> continue
                 },
                 when (position) {
-                    Position.LEFT -> vCenter + (notchSize - i) + 0.5
-                    Position.RIGHT -> vCenter + (notchSize - i) + 0.5
+                    Position.LEFT -> vCenter + (notchSize - i) + 0.5f
+                    Position.RIGHT -> vCenter + (notchSize - i) + 0.5f
                     Position.ABOVE -> bottom + i + 2
                     Position.BELOW -> top - i - 1
                     Position.MOUSE -> continue
                     is Position.MOUSE_OFFSET -> continue
                 },
+                EssentialPalette.BLACK,
             )
-            UIBlock.drawBlock(
-                matrixStack,
-                EssentialPalette.COMPONENT_BACKGROUND,
+            extractor.fillMcScale(
                 when (position) {
                     Position.LEFT -> right + i
                     Position.RIGHT -> left - 1 - i
-                    Position.ABOVE -> hCenter - (notchSize - i) - 0.5
-                    Position.BELOW -> hCenter - (notchSize - i) - 0.5
+                    Position.ABOVE -> hCenter - (notchSize - i) - 0.5f
+                    Position.BELOW -> hCenter - (notchSize - i) - 0.5f
                     Position.MOUSE -> continue
                     is Position.MOUSE_OFFSET -> continue
                 },
                 when (position) {
-                    Position.LEFT -> vCenter - (notchSize - i) - 0.5
-                    Position.RIGHT -> vCenter - (notchSize - i) - 0.5
+                    Position.LEFT -> vCenter - (notchSize - i) - 0.5f
+                    Position.RIGHT -> vCenter - (notchSize - i) - 0.5f
                     Position.ABOVE -> bottom + i
                     Position.BELOW -> top - 1 - i
                     Position.MOUSE -> continue
@@ -314,23 +358,22 @@ class EssentialTooltip(
                 when (position) {
                     Position.LEFT -> right + 1 + i
                     Position.RIGHT -> left - i
-                    Position.ABOVE -> hCenter + (notchSize - i) + 0.5
-                    Position.BELOW -> hCenter + (notchSize - i) + 0.5
+                    Position.ABOVE -> hCenter + (notchSize - i) + 0.5f
+                    Position.BELOW -> hCenter + (notchSize - i) + 0.5f
                     Position.MOUSE -> continue
                     is Position.MOUSE_OFFSET -> continue
                 },
                 when (position) {
-                    Position.LEFT -> vCenter + (notchSize - i) + 0.5
-                    Position.RIGHT -> vCenter + (notchSize - i) + 0.5
+                    Position.LEFT -> vCenter + (notchSize - i) + 0.5f
+                    Position.RIGHT -> vCenter + (notchSize - i) + 0.5f
                     Position.ABOVE -> bottom + i + 1
                     Position.BELOW -> top - i
                     Position.MOUSE -> continue
                     is Position.MOUSE_OFFSET -> continue
                 },
+                EssentialPalette.COMPONENT_BACKGROUND,
             )
         }
-
-        super.afterDraw(matrixStack)
     }
 
     sealed interface Position {

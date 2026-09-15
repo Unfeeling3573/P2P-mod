@@ -23,6 +23,8 @@ import gg.essential.gui.elementa.state.v2.MutableState
 import gg.essential.gui.elementa.state.v2.ReferenceHolderImpl
 import gg.essential.gui.elementa.state.v2.await
 import gg.essential.gui.elementa.state.v2.awaitValue
+import gg.essential.gui.elementa.state.v2.collections.TrackedList
+import gg.essential.gui.elementa.state.v2.collections.effectOnChange
 import gg.essential.gui.elementa.state.v2.mutableStateOf
 import gg.essential.gui.elementa.state.v2.toListState
 import gg.essential.gui.notification.Notifications
@@ -34,8 +36,10 @@ import gg.essential.network.connectionmanager.ConnectionManagerStatus
 import gg.essential.universal.UMinecraft
 import gg.essential.util.GuiUtil
 import gg.essential.util.USession
+import gg.essential.util.UuidNameLookup
 import gg.essential.util.colored
 import gg.essential.util.executor
+import gg.essential.util.logExceptions
 import gg.essential.util.raceOf
 import gg.essential.util.setSession
 import kotlinx.coroutines.CoroutineScope
@@ -50,28 +54,27 @@ class AccountManager {
 
     private val referenceHolder = ReferenceHolderImpl()
     private val allAccountsMutable = mutableStateOf<List<AccountInfo>>(listOf())
-    private val originalAccountsMutable = mutableStateOf<List<AccountInfo>>(listOf())
     val allAccounts: ListState<AccountInfo> = allAccountsMutable.toListState()
-    val originalAccounts: ListState<AccountInfo> = originalAccountsMutable.toListState()
 
     init {
         USession.active.onSetValueAndNow(referenceHolder) {
             refreshAccounts()
         }
         WebAccountManager.mostRecentAccountManager = WeakReference(this)
+        // Add accounts to UuidNameLookup
+        allAccounts.effectOnChange(referenceHolder) {
+            if (it is TrackedList.Add) UuidNameLookup.populate(it.element.value.name, it.element.value.uuid)
+        }
     }
 
     private fun refreshAccounts() {
         val sessionFactories = Essential.getInstance().sessionFactories
         val accounts = sessionFactories
-            .flatMap { it.sessions.values }
+            .flatMap { factory ->
+                factory.sessions.values.map { AccountInfo(it.uuid, it.username, factory is ManagedSessionFactory) }
+            }
             .distinctBy { it.uuid }
-            .map { AccountInfo(it.uuid, it.username) }
         allAccountsMutable.set(accounts.toList())
-
-        // Find original account(s) that cannot be removed
-        val managedSessions = sessionFactories.filterIsInstance<ManagedSessionFactory>().flatMap { it.sessions.keys }
-        originalAccountsMutable.set(accounts.filterNot { it.uuid in managedSessions })
     }
 
     /**
@@ -177,6 +180,7 @@ class AccountManager {
                             error?.let { error(it) }
                         }
                     }, mc.executor)
+                    .logExceptions()
             } else {
                 // Otherwise, check if it's in the initial session, which we can simply activate
                 val initialSession =
@@ -198,5 +202,5 @@ class AccountManager {
 
     class UnknownAccountException : Exception("Unknown account")
 
-    data class AccountInfo(val uuid: UUID, val name: String)
+    data class AccountInfo(val uuid: UUID, val name: String, val isManagedByEssential: Boolean)
 }

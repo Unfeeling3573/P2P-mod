@@ -14,6 +14,7 @@ package gg.essential.mixins.transformers.feature.nameplate_icon;
 import com.llamalad7.mixinextras.sugar.Local;
 import gg.essential.mixins.impl.LabelCommandExt;
 import gg.essential.model.ModelInstance;
+import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.render.command.LabelCommandRenderer;
 import net.minecraft.client.render.command.OrderedRenderCommandQueueImpl;
 import gg.essential.cosmetics.CosmeticsRenderState;
@@ -26,10 +27,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import static gg.essential.universal.utils.TextUtilsKt.toFormattedString;
-
 //#if MC >= 26.2
 //$$ import net.minecraft.client.gui.Font;
+//$$ import net.minecraft.client.renderer.feature.FeatureFrameContext;
 //$$ import net.minecraft.client.renderer.feature.RenderTypeFeatureRenderer;
 //#endif
 
@@ -40,15 +40,24 @@ public abstract class Mixin_NameplateIcon_Render
     //#endif
 {
     //#if MC >= 26.2
+    //#if MC >= 26.3
+    //$$ @Inject(method = "buildGroup", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/feature/TextFeatureRenderer;renderText(Lnet/minecraft/client/gui/Font;Lnet/minecraft/client/renderer/feature/TextFeatureRenderer$GlyphRenderer;Lnet/minecraft/client/renderer/feature/TextFeatureRenderer$Content$Text;)V"))
+    //#else
     //$$ @Inject(method = "buildGroup", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Font$PreparedText;visit(Lnet/minecraft/client/gui/Font$GlyphVisitor;)V"))
+    //#endif
     //$$ private void renderEssentialIndicatorSeeThrough(
     //$$     CallbackInfo ci,
-    //$$     @Local(name = "nameTag") NameTagFeatureRenderer.Submit nameTag
+    //$$     @Local(argsOnly = true) FeatureFrameContext context,
+        //#if MC >= 26.3
+        //$$ @Local(name = "submit") TextFeatureRenderer.Submit nameTag
+        //#else
+        //$$ @Local(name = "nameTag") NameTagFeatureRenderer.Submit nameTag
+        //#endif
     //$$ ) {
     //$$     @SuppressWarnings("Convert2MethodRef") // breaks mixin
     //$$     VertexConsumerProvider vertexConsumerProvider = renderType -> getVertexBuilder(renderType);
     //$$     boolean seeThrough = nameTag.displayMode() == Font.DisplayMode.SEE_THROUGH;
-    //$$     renderEssentialIndicator(vertexConsumerProvider, nameTag, seeThrough);
+    //$$     renderEssentialIndicator(vertexConsumerProvider, context.font(), nameTag, seeThrough);
     //$$ }
     //#else
     //#if MC >= 26.1
@@ -61,24 +70,27 @@ public abstract class Mixin_NameplateIcon_Render
     private void renderEssentialIndicatorSeeThrough(
         CallbackInfo ci,
         @Local(argsOnly = true) VertexConsumerProvider.Immediate immediate,
+        @Local(argsOnly = true) TextRenderer textRenderer,
         @Local OrderedRenderCommandQueueImpl.LabelCommand command
     ) {
-        renderEssentialIndicator(immediate, command, true);
+        renderEssentialIndicator(immediate, textRenderer, command, true);
     }
 
     @Inject(method = "render", at = @At(value = "INVOKE", target = DRAW_TEXT, ordinal = 1))
     private void renderEssentialIndicatorNormal(
         CallbackInfo ci,
         @Local(argsOnly = true) VertexConsumerProvider.Immediate immediate,
+        @Local(argsOnly = true) TextRenderer textRenderer,
         @Local OrderedRenderCommandQueueImpl.LabelCommand command
     ) {
-        renderEssentialIndicator(immediate, command, false);
+        renderEssentialIndicator(immediate, textRenderer, command, false);
     }
     //#endif
 
     @Unique
     private void renderEssentialIndicator(
         VertexConsumerProvider vertexConsumerProvider,
+        TextRenderer textRenderer,
         //#if MC >= 26.2
         //$$ NameTagFeatureRenderer.Submit command,
         //#else
@@ -89,7 +101,16 @@ public abstract class Mixin_NameplateIcon_Render
         UMatrixStack matrixStack = new UMatrixStack();
         matrixStack.peek().getModel().set(command.matricesEntry());
 
-        String text = toFormattedString(command.text());
+        //#if MC >= 26.3
+        //$$ TextFeatureRenderer.Content.Text content = (TextFeatureRenderer.Content.Text) command.content();
+        //$$ int textWidth = textRenderer.width(content.string());
+        //$$ int color = content.color();
+        //$$ int backgroundColor = content.backgroundColor();
+        //#else
+        int textWidth = textRenderer.getWidth(command.text());
+        int color = command.color();
+        int backgroundColor = command.backgroundColor();
+        //#endif
 
         CosmeticsRenderState cState = LabelCommandExt.of(command).essential$getCosmeticsRenderState();
         ModelInstance icon = cState != null ? cState.nametagIcon() : null;
@@ -98,6 +119,6 @@ public abstract class Mixin_NameplateIcon_Render
         //  therefore much less batching than otherwise possible (basically pre-1.21.9 levels).
         //  We should try to use the same layer as vanilla such that texts can be drawn in a single call.
         IconCosmeticRenderer.INSTANCE.drawNameTagIconAndVersionConsistentPadding(
-            matrixStack, vertexConsumerProvider, seeThrough, command.color(), command.backgroundColor(), icon, text, command.lightCoords());
+            matrixStack, vertexConsumerProvider, seeThrough, color, backgroundColor, icon, textWidth, command.lightCoords());
     }
 }

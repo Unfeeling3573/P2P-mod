@@ -15,6 +15,8 @@ import gg.essential.Essential
 import gg.essential.config.EssentialConfig
 import gg.essential.elementa.UIComponent
 import gg.essential.elementa.components.UIImage
+import gg.essential.elementa.components.image.extractMcScale
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.elementa.state.v2.Observer
 import gg.essential.gui.elementa.state.v2.State
@@ -23,7 +25,6 @@ import gg.essential.gui.elementa.state.v2.mapList
 import gg.essential.gui.elementa.state.v2.memo
 import gg.essential.gui.friends.state.PlayerActivity
 import gg.essential.sps.SpsAddress
-import gg.essential.universal.UMatrixStack
 import gg.essential.universal.UMinecraft
 import gg.essential.util.CachedAvatarImage
 import gg.essential.util.GuiEssentialPlatform.Companion.platform
@@ -64,8 +65,10 @@ class FriendsIndicator(val server: ServerData) {
 
     private fun appendInvite(uuid: UUID) = if (connectionManager.socialManager.incomingServerInvites[uuid] == server.serverIP) " (Invite)" else ""
 
-    fun draw(
-        matrixStack: UMatrixStack,
+    fun needsToDraw() = EssentialConfig.essentialEnabled && friends.getUntracked().isNotEmpty()
+
+    fun extract(
+        extractor: ElementaExtractor,
         x: Int,
         y: Int,
         listWidth: Int,
@@ -108,12 +111,12 @@ class FriendsIndicator(val server: ServerData) {
             if (mouseX in currentX until currentX + HEAD_SIZE && mouseY in y..(y + HEAD_SIZE)) {
                 tooltip = friend.name.getUntracked() + appendInvite(friend.uuid)
             }
-            friend.avatar.findChildOfTypeOrNull<UIImage>(recursive = true)!!.drawImage(
-                matrixStack,
-                currentX.toDouble(),
-                y.toDouble(),
-                HEAD_SIZE.toDouble(),
-                HEAD_SIZE.toDouble(),
+            friend.avatar.findChildOfTypeOrNull<UIImage>(recursive = true)!!.extractMcScale(
+                extractor,
+                currentX.toFloat(),
+                y.toFloat(),
+                HEAD_SIZE.toFloat(),
+                HEAD_SIZE.toFloat(),
                 VigilancePalette.getBrightText(),
             )
         }
@@ -126,12 +129,12 @@ class FriendsIndicator(val server: ServerData) {
                     it.name.getUntracked() + appendInvite(it.uuid)
                 }
             }
-            EssentialPalette.ELLIPSES_5X1.create().drawImage(
-                matrixStack,
-                ellipsesX.toDouble(),
-                y + 7.0,
-                TRUNCATED_WIDTH.toDouble(),
-                1.0,
+            EssentialPalette.ELLIPSES_5X1.create().extractMcScale(
+                extractor,
+                ellipsesX.toFloat(),
+                y + 7f,
+                TRUNCATED_WIDTH.toFloat(),
+                1f,
                 VigilancePalette.getBrightText(),
             )
         }

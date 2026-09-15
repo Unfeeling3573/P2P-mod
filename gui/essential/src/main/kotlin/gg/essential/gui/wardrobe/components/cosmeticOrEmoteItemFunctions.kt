@@ -236,7 +236,11 @@ private fun getBundleRightClickOptions(item: Item.Bundle, wardrobeState: Wardrob
             options.add {
                 if (cost() > 0) {
                     ContextOptionMenu.Option("Purchase", EssentialPalette.SHOPPING_CART_8X7) {
-                        if (!wardrobeState.hasEnoughCoins(item)) {
+                        val hasEnoughCoins = wardrobeState.hasEnoughCoins(item) ?: run {
+                            sendPurchaseFailedNotification()
+                            return@Option
+                        }
+                        if (!hasEnoughCoins) {
                             CoinsPurchaseModal.open(wardrobeState, item.getCost(wardrobeState).getUntracked())
                             return@Option
                         }
@@ -285,7 +289,11 @@ private fun getRightClickOptions(item: Item.CosmeticOrEmote, wardrobeState: Ward
         if (showPurchaseOption) {
             options.add {
                 ContextOptionMenu.Option("Purchase", image = EssentialPalette.SHOPPING_CART_8X7) {
-                    if (!wardrobeState.hasEnoughCoins(item)) {
+                    val hasEnoughCoins = wardrobeState.hasEnoughCoins(item) ?: run {
+                        sendPurchaseFailedNotification()
+                        return@Option
+                    }
+                    if (!hasEnoughCoins) {
                         CoinsPurchaseModal.open(wardrobeState, item.getCost(wardrobeState).getUntracked())
                         return@Option
                     }
@@ -393,5 +401,12 @@ fun handleVariantHover(variant: CosmeticProperty.Variants.Variant, item: Item.Co
         if (hovered) map + (item.cosmetic.id to setting)
         else if (map[item.cosmetic.id] == setting) map - item.cosmetic.id
         else map
+    }
+}
+
+fun sendPurchaseFailedNotification() {
+    Notifications.push("Purchase failed", "Please try again later") {
+        type = NotificationType.ERROR
+        withCustomComponent(Slot.ICON, EssentialPalette.REPORT_10X7.create())
     }
 }

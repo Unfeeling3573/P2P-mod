@@ -13,6 +13,8 @@ package gg.essential.gui
 
 import gg.essential.config.LoadsResources
 import gg.essential.elementa.components.UIImage
+import gg.essential.elementa.font.BasicFontRenderer
+import gg.essential.elementa.font.data.Font
 import gg.essential.elementa.state.BasicState
 import gg.essential.elementa.state.State
 import gg.essential.elementa.utils.withAlpha
@@ -489,6 +491,18 @@ object EssentialPalette {
 
     @JvmField
     val SERVER_DOWNLOAD_ICON: Color = Color(0x1D6AFF)
+
+    @JvmField
+    val GRADIENT_MODAL_BORDER_START: Color = Color(0x474747)
+
+    @JvmField
+    val GRADIENT_MODAL_BORDER_END: Color = Color(0x4A84D9)
+
+    @JvmField
+    val GRADIENT_MODAL_BACKGROUND_START: Color = Color(0x181818)
+
+    @JvmField
+    val GRADIENT_MODAL_BACKGROUND_END: Color = Color(0x10161E)
 
     /** Gray/gray600 */
     @JvmField
@@ -1090,6 +1104,12 @@ object EssentialPalette {
     val HOST_5X: ImageFactory = ResourceImageFactory("/assets/essential/textures/host_5x.png")
 
     @JvmField
+    val CROWN_ICON: ImageFactory = ResourceImageFactory("/assets/essential/textures/menu/crown.png")
+
+    @JvmField
+    val DRAG_ICON: ImageFactory = ResourceImageFactory("/assets/essential/textures/drag_icon.png")
+
+    @JvmField
     val SMILEY_8X: ImageFactory = ResourceImageFactory("/assets/essential/textures/account/smiley_8x8.png")
 
     @JvmField
@@ -1101,6 +1121,23 @@ object EssentialPalette {
     val LOADING_ANIMATION = AnimatedResourceImageFactory("/assets/essential/textures/loading/loading_", ".png", 12, 80)
 
     val CLOCK_ANIMATION = AnimatedResourceImageFactory("/assets/essential/textures/studio/clock_", ".png", 4, 1000)
+
+    /* Fonts */
+    /*
+       Minecraft-Ten was generated using https://github.com/Chlumsky/msdf-atlas-gen/
+       More specifically, the following command:
+       `.\msdf-atlas-gen.exe -font '.\Minecrafted Ten.ttf' -type hardmask -format png -imageout Minecraft-Ten.png -json Minecraft-Ten.json -fontname Minecraft-Ten -size 10 -pxalign on -pxrange 1 -pxpadding 0 -outerpxpadding 0 -fontscale 0.998`
+       The extra parameters at the end ensure that the font id grid-aligned and doesn't have unnecessary padding in the right.
+       Then, 3 extra properties (baseCharHeight, belowLineHeight, shadowHeight) were added to the .json, to fully configure it.
+     */
+    private val MINECRAFT_TEN_FONT by lazy { loadFont("Minecraft-Ten") }
+    private val MINECRAFT_FIVE_FONT by lazy { loadFont("Minecraft-Five") }
+
+    val MINECRAFT_TEN by lazy { BasicFontRenderer(MINECRAFT_TEN_FONT) }
+    val MINECRAFT_FIVE by lazy { BasicFontRenderer(MINECRAFT_FIVE_FONT) }
+
+    @LoadsResources("/assets/essential/fonts/%name%.(json|png)")
+    private fun loadFont(name: String) = Font.fromResource("/assets/essential/fonts/$name")
 
     @LoadsResources("/assets/essential/textures/friends/group_[a-z]+.png")
     private fun createGroupIconFactory(name: String): ImageFactory =

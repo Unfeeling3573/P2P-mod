@@ -11,6 +11,7 @@
  */
 package gg.essential.network.connectionmanager.ice
 
+import gg.essential.Essential
 import gg.essential.connectionmanager.common.packet.telemetry.ClientTelemetryPacket
 import gg.essential.gui.elementa.state.v2.ReferenceHolderImpl
 import gg.essential.gui.elementa.state.v2.State
@@ -22,7 +23,6 @@ import gg.essential.network.connectionmanager.ice.IceEventLoopGroups.ICE_SERVER_
 import gg.essential.network.connectionmanager.ice.netty.CloseAfterFirstMessage
 import gg.essential.network.connectionmanager.ice.netty.CoroutinesChannelInitializer
 import gg.essential.sps.McIntegratedServerManager
-import gg.essential.sps.ResourcePackSharingHttpServer
 import gg.essential.util.Client
 import gg.essential.util.ProtocolUtils.IPV4_HEADER_SIZE
 import gg.essential.util.ProtocolUtils.IPV6_HEADER_SIZE
@@ -67,7 +67,7 @@ class IceManagerMcImpl(
     }
 
     override val resourcePackHttpServerPort: Int
-        get() = ResourcePackSharingHttpServer.port ?: 9
+        get() = Essential.getInstance().sharedResourcePacksManager.resourcePackServer.port
 
     // Called from dedicated thread. Must be thread-safe and may block.
     @Throws(IOException::class)
@@ -122,7 +122,9 @@ class IceManagerMcImpl(
 
     private inner class TelemetryImpl(private val client: UUID) : Telemetry {
         private val sessionId = connectionsScope.async(Dispatchers.Client) {
-            cmConnection.spsManager.sessionId
+            Essential.getInstance().worldsManager
+                .integratedServerWorld.getUntracked()
+                ?.localShareSession?.getUntracked()
         }
         private val receivedPackets = AtomicInteger()
         private val receivedBytes = AtomicLong()

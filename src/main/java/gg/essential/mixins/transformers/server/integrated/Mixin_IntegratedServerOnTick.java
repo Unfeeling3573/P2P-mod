@@ -13,6 +13,8 @@ package gg.essential.mixins.transformers.server.integrated;
 
 import gg.essential.Essential;
 import gg.essential.event.network.server.ServerTickEvent;
+import gg.essential.mixins.ext.server.integrated.IntegratedServerExt;
+import gg.essential.sps.McIntegratedServerManager;
 import net.minecraft.server.integrated.IntegratedServer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -24,5 +26,7 @@ public abstract class Mixin_IntegratedServerOnTick {
     @Inject(method = "tick", at = @At("HEAD"))
     protected void tick(CallbackInfo ci) {
         Essential.EVENT_BUS.post(new ServerTickEvent());
+        McIntegratedServerManager manager = ((IntegratedServerExt) this).getEssential$manager();
+        manager.onServerTick();
     }
 }

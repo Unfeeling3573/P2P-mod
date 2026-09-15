@@ -34,8 +34,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class Mixin_GuiKeyTypedEvent {
 
     @Unique
-    private static void keyTyped(char typedChar, int keyCode, boolean[] result, CallbackInfo ci) {
-        GuiKeyTypedEvent event = new GuiKeyTypedEvent(UMinecraft.getMinecraft().currentScreen, typedChar, keyCode);
+    private static void keyTyped(char typedChar, int keyCode, int scancode, boolean[] result, CallbackInfo ci) {
+        GuiKeyTypedEvent event = new GuiKeyTypedEvent(UMinecraft.getMinecraft().currentScreen, typedChar, keyCode, scancode);
         Essential.EVENT_BUS.post(event);
         if (event.isCancelled()) {
             if (result != null) {
@@ -86,7 +86,7 @@ public class Mixin_GuiKeyTypedEvent {
         CallbackInfo ci
     ) {
         if (action == GLFW.GLFW_PRESS || action == GLFW.GLFW_REPEAT) {
-            keyTyped('\0', key, result, ci);
+            keyTyped('\0', key, scanCode, result, ci);
         }
     }
 
@@ -122,7 +122,7 @@ public class Mixin_GuiKeyTypedEvent {
         //#endif
         CallbackInfo ci
     ) {
-        keyTyped((char) typedChar, 0, null, ci);
+        keyTyped((char) typedChar, 0, -1, null, ci);
     }
 
     @Inject(method = {
@@ -157,7 +157,7 @@ public class Mixin_GuiKeyTypedEvent {
         //#endif
         CallbackInfo ci
     ) {
-        keyTyped(typedChar, 0, null, ci);
+        keyTyped(typedChar, 0, -1, null, ci);
     }
 
     // OptiFine Compat:
@@ -172,7 +172,7 @@ public class Mixin_GuiKeyTypedEvent {
     //#endif
     //$$ private void onKeyTyped(int action, boolean[] result, Screen screen, int key, int scanCode, int modifier, CallbackInfo ci) {
     //$$     if (action == 1) {
-    //$$         keyTyped('\0', key, result, ci);
+    //$$         keyTyped('\0', key, scanCode, result, ci);
     //$$     }
     //$$ }
     //#endif
@@ -181,7 +181,7 @@ public class Mixin_GuiKeyTypedEvent {
     //$$ @Surrogate
     //$$ private void onKeyTyped(int action, boolean[] result, int key, int scanCode, int modifier, Screen screen, CallbackInfo ci) {
     //$$     if (action == 1) {
-    //$$         keyTyped('\0', key, result, ci);
+    //$$         keyTyped('\0', key, scanCode, result, ci);
     //$$     }
     //$$ }
     //#elseif FABRIC
@@ -189,7 +189,7 @@ public class Mixin_GuiKeyTypedEvent {
     //$$ @Surrogate
     //$$ private void onKeyTyped(int action, boolean[] result, int key, int scanCode, int modifier, ParentElement screen, CallbackInfo ci) {
     //$$     if (action == 1) {
-    //$$         keyTyped('\0', key, result, ci);
+    //$$         keyTyped('\0', key, scanCode, result, ci);
     //$$     }
     //$$ }
     //#endif
@@ -198,13 +198,13 @@ public class Mixin_GuiKeyTypedEvent {
     //$$ @Dynamic("Optifine reorders arguments and adds static modifier")
     //$$ @Surrogate
     //$$ private static void onCharTypedSingle(Keyboard self, int typedChar, int modifiers, Element handler, CallbackInfo ci) {
-    //$$     keyTyped((char) typedChar, 0, null, ci);
+    //$$     keyTyped((char) typedChar, 0, -1, null, ci);
     //$$ }
     //$$
     //$$ @Dynamic("Optifine reorders arguments and adds static modifier")
     //$$ @Surrogate
     //$$ private static void onCharTypedMulti(Keyboard self, char typedChar, int modifiers, Element handler, CallbackInfo ci) {
-    //$$     keyTyped(typedChar, 0, null, ci);
+    //$$     keyTyped(typedChar, 0, -1, null, ci);
     //$$ }
     //#endif
 }

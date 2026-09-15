@@ -294,7 +294,7 @@ class Wardrobe(
                 //#if MC>=11602
                 //$$ keyCode == UKeyboard.KEY_ESCAPE -> restorePreviousScreen()
                 //#endif
-                Essential.getInstance().keybindingRegistry.toggleCosmetics.isKeyCode(keyCode)
+                Essential.getInstance().keybindingRegistry.toggleCosmetics.isKeyCodeLegacy(keyCode)
                         && !EssentialConfig.disableCosmetics -> {
                     EssentialConfig.ownCosmeticsVisibleStateWithSource.set { !it.first to EssentialConfig.CosmeticsVisibilitySource.UserWithNotification }
                 }

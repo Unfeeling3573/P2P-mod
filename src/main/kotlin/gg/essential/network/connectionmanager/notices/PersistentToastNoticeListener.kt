@@ -12,30 +12,35 @@
 package gg.essential.network.connectionmanager.notices
 
 import gg.essential.Essential
-import gg.essential.event.gui.GuiOpenEvent
+import gg.essential.elementa.state.v2.ReferenceHolder
+import gg.essential.event.gui.GuiOpenedEvent
+import gg.essential.gui.elementa.state.v2.collections.effectOnChange
+import gg.essential.gui.elementa.state.v2.filter
+import gg.essential.gui.elementa.state.v2.mapEach
+import gg.essential.gui.elementa.state.v2.mapList
+import gg.essential.gui.elementa.state.v2.mutableStateOf
 import gg.essential.gui.notification.Notifications
 import gg.essential.gui.wardrobe.Wardrobe
 import gg.essential.gui.wardrobe.WardrobeCategory
 import gg.essential.network.connectionmanager.telemetry.TelemetryManager
 import gg.essential.notices.NoticeType
 import gg.essential.notices.model.Notice
-import gg.essential.universal.UMinecraft
-import gg.essential.universal.UScreen
 import gg.essential.util.GuiUtil
-import gg.essential.util.Multithreading
 import gg.essential.util.isMainMenu
 import me.kbrewster.eventbus.Subscribe
-import java.time.Instant
-import java.time.temporal.ChronoUnit
-import java.util.*
-import java.util.concurrent.TimeUnit
 
 class PersistentToastNoticeListener(
+    refHolder: ReferenceHolder,
     private val noticesManager: NoticesManager,
-) : NoticeListener {
+) {
 
-    private val pushedToasts = mutableMapOf<Notice, () -> Unit>()
-    private val notices = mutableSetOf<Notice>()
+    private val notices = noticesManager.activeNotices.filter { it.type == NoticeType.DISMISSIBLE_TOAST }
+
+    private val isMainMenu = mutableStateOf(false)
+
+    class ToastState(val notice: Notice) {
+        var close: (() -> Unit)? = null
+    }
 
     private val actions = mapOf(
         "OPEN_EMOTES" to { GuiUtil.openScreen { Wardrobe(initialCategory = WardrobeCategory.Emotes) } },
@@ -43,95 +48,53 @@ class PersistentToastNoticeListener(
 
     init {
         Essential.EVENT_BUS.register(this)
+
+        val toasts = notices
+            .mapList { if (isMainMenu()) it else emptyList() }
+            .mapEach { ToastState(it) }
+        toasts.effectOnChange(refHolder, add = { (_, toast) ->
+            pushNoticeToast(toast)
+        }, remove = { (_, toast) ->
+            toast.close?.invoke()
+            toast.close = null
+        })
     }
 
-    override fun noticeAdded(notice: Notice) {
-        if (notice.type != NoticeType.DISMISSIBLE_TOAST) {
-            return
-        }
-        notices.add(notice)
-        if (UScreen.currentScreen.isMainMenu) {
-            pushNoticeToast(notice)
-        }
-    }
-
-    private fun pushNoticeToast(notice: Notice) {
+    private fun pushNoticeToast(toast: ToastState) {
+        val notice = toast.notice
         val title = notice.metadata["title"] as? String ?: return
         val message = notice.metadata["message"] as? String ?: return
         val action = notice.metadata["action"] as? String
 
         val telemetryManager = Essential.getInstance().connectionManager.telemetryManager
 
-        val pushNotice = {
-            // Send a dismissible toast with the title and message
-            Notifications.pushPersistentToast(title, message, {
-                // When the toast is clicked
+        var closedProgrammatically = false
+
+        Notifications.pushPersistentToast(
+            title,
+            message,
+            action = {
                 // FIXME: This is hard coded for now until we have a better way to handle this
                 actions[action]?.let { it() }
-                dismissToast(notice)
+                noticesManager.dismissNotice(notice.id)
                 telemetryManager.clientActionPerformed(TelemetryManager.Actions.PERSISTENT_TOAST_CLICKED, notice.id)
-            }, {
-                // When the [x] is pressed. We need to check pushedToasts to make sure
-                // this is not called by the toast being dismissed due to the screen changing
-                if (notice in pushedToasts.keys) {
-                    dismissToast(notice)
-                    telemetryManager.clientActionPerformed(TelemetryManager.Actions.PERSISTENT_TOAST_CLEARED, notice.id)
+            },
+            close = {
+                if (closedProgrammatically) return@pushPersistentToast
+                noticesManager.dismissNotice(notice.id)
+                telemetryManager.clientActionPerformed(TelemetryManager.Actions.PERSISTENT_TOAST_CLEARED, notice.id)
+            },
+            configure = {
+                toast.close = {
+                    closedProgrammatically = true
+                    dismissNotificationInstantly()
                 }
-
-            }) {
-                pushedToasts[notice] = this.dismissNotificationInstantly
-            }
-        }
-
-        val activeAfter = notice.activeAfter ?: return
-        if (activeAfter.after(Date.from(Instant.now()))) {
-            pushNotice()
-        } else {
-            Multithreading.scheduleOnMainThread(pushNotice, Instant.now().until(activeAfter.toInstant(), ChronoUnit.MILLIS), TimeUnit.MILLISECONDS)
-        }
-
-        notice.expiresAt?.let { expiresAt ->
-            Multithreading.scheduleOnMainThread({
-                noticeRemoved(notice)
-            }, Instant.now().until(expiresAt.toInstant(), ChronoUnit.MILLIS), TimeUnit.MILLISECONDS)
-        }
+            },
+        )
     }
 
     @Subscribe
-    fun guiOpenEvent(event: GuiOpenEvent) {
-        if ((event.gui.isMainMenu || event.gui == null) && UMinecraft.getWorld() == null) {
-            notices.forEach { notice ->
-                // Check the notice is not already showing
-                if (notice !in pushedToasts.keys) {
-                    pushNoticeToast(notice)
-                }
-            }
-        } else {
-            hideAllToasts()
-        }
-    }
-
-    private fun hideAllToasts() {
-        pushedToasts.entries.toMutableSet().forEach { (notice, dismissAction) ->
-            pushedToasts.remove(notice)
-            dismissAction()
-        }
-    }
-
-    private fun dismissToast(notice: Notice) {
-        noticesManager.dismissNotice(notice.id)
-        notices.remove(notice)
-    }
-
-    override fun noticeRemoved(notice: Notice) {
-        notices.remove(notice)
-        pushedToasts.remove(notice)?.let { dismiss ->
-            dismiss()
-        }
-    }
-
-    override fun onConnect() {
-        hideAllToasts()
-        notices.clear()
+    fun guiOpenedEvent(event: GuiOpenedEvent) {
+        isMainMenu.set(event.screen.isMainMenu)
     }
 }

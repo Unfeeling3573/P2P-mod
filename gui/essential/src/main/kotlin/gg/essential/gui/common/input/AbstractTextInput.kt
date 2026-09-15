@@ -18,6 +18,9 @@ import gg.essential.elementa.constraints.*
 import gg.essential.elementa.constraints.animation.*
 import gg.essential.elementa.dsl.*
 import gg.essential.elementa.effects.ScissorEffect
+import gg.essential.elementa.font.extractMcScale
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.fillMcScale
 import gg.essential.elementa.utils.getStringSplitToWidth
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.common.ContextOptionMenu
@@ -29,6 +32,7 @@ import gg.essential.universal.UMatrixStack
 import java.awt.Color
 import java.util.*
 import kotlin.math.abs
+import kotlin.math.ceil
 
 abstract class AbstractTextInput(
     var placeholder: String,
@@ -101,12 +105,22 @@ abstract class AbstractTextInput(
 
     var cursor = LinePosition(0, 0, isVisual = true)
         protected set(value) {
-            field = value.toVisualPos()
+            if (active) {
+                field = value.toVisualPos()
+            } else {
+                field = LinePosition(0, 0, isVisual = true)
+                cursorNeedsRefocus = true
+            }
         }
 
     protected var otherSelectionEnd = LinePosition(0, 0, isVisual = true)
         set(value) {
-            field = value.toVisualPos()
+            if (active) {
+                field = value.toVisualPos()
+            } else {
+                field = LinePosition(0, 0, isVisual = true)
+                cursorNeedsRefocus = true
+            }
         }
 
     enum class SelectionMode {
@@ -283,6 +297,7 @@ abstract class AbstractTextInput(
             grabWindowFocus()
 
             val clickedVisualPos = screenPosToVisualPos(event.relativeX, event.relativeY)
+            setActive(true)
 
             var clickCount = event.clickCount % 3
             if (clickCount == 0 && clickedVisualPos.line != cursor.line)
@@ -494,11 +509,17 @@ abstract class AbstractTextInput(
         if (isActive) {
             cursorComponent.unhide()
             animateCursor()
+            if (hasText() && (!allowInactiveSelection || !hasSelection()) && cursor.isAtAbsoluteStart) {
+                setCursorPosition(LinePosition(visualLines.lastIndex, visualLines.last().length, isVisual = true))
+            }
+            UKeyboard.startTextInput(this)
+            updateTextInputArea()
         } else {
             cursorComponent.setColor(Color(255, 255, 255, 0).toConstraint())
             if (hasText() && (!allowInactiveSelection || !hasSelection())) {
-                setCursorPosition(LinePosition(visualLines.lastIndex, visualLines.last().length, isVisual = true))
+                setCursorPosition(LinePosition(0, 0, isVisual = true))
             }
+            UKeyboard.stopTextInput(this)
         }
     }
 
@@ -832,13 +853,22 @@ abstract class AbstractTextInput(
     protected open fun hasText() = textualLines.size > 1 || textualLines[0].text.isNotEmpty()
 
     @Deprecated(UMatrixStack.Compat.DEPRECATED, ReplaceWith("drawUnselectedText(matrixStack, text, left, row)"))
+    @Suppress("DEPRECATION")
     protected open fun drawUnselectedText(text: String, left: Float, row: Int) =
         drawUnselectedText(UMatrixStack.Compat.get(), text, left, row)
 
+    protected fun extractPlaceholder(extractor: ElementaExtractor) {
+        extractUnselectedText(extractor, placeholder, getLeft(), 0, placeholderColor.getUntracked(), placeholderShadow.getUntracked())
+    }
+
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
+    @Suppress("DEPRECATION")
     protected open fun drawPlaceholder(matrixStack: UMatrixStack) {
         drawUnselectedText(matrixStack, placeholder, getLeft(), 0, placeholderColor.getUntracked(), placeholderShadow.getUntracked())
     }
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
+    @Suppress("DEPRECATION")
     protected open fun drawUnselectedText(
         matrixStack: UMatrixStack,
         text: String,
@@ -861,10 +891,34 @@ abstract class AbstractTextInput(
         )
     }
 
+    protected fun extractUnselectedText(
+        extractor: ElementaExtractor,
+        text: String,
+        left: Float,
+        row: Int,
+        color: Color? = null,
+        shadow: Boolean = this.contentShadow,
+        shadowColor: Color? = this.contentShadowColor,
+    ) {
+        getFontProvider().extractMcScale(
+            extractor,
+            text,
+            color ?: getColor(),
+            left - horizontalScrollingOffset,
+            getTop() + ((lineHeightWithPadding * row + 1) * getTextScale()) + verticalScrollingOffset,
+            getTextScale(),
+            shadow,
+            shadowColor,
+        )
+    }
+
     @Deprecated(UMatrixStack.Compat.DEPRECATED, ReplaceWith("drawSelectedText(matrixStack, text, left, right, row)"))
+    @Suppress("DEPRECATION")
     protected open fun drawSelectedText(text: String, left: Float, right: Float, row: Int) =
         drawSelectedText(UMatrixStack.Compat.get(), text, left, right, row)
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
+    @Suppress("DEPRECATION")
     protected open fun drawSelectedText(matrixStack: UMatrixStack, text: String, left: Float, right: Float, row: Int) {
         UIBlock.drawBlock(
             matrixStack,
@@ -889,6 +943,28 @@ abstract class AbstractTextInput(
         }
     }
 
+    protected fun extractSelectedText(extractor: ElementaExtractor, text: String, left: Float, right: Float, row: Int) {
+        extractor.fillMcScale(
+            left - horizontalScrollingOffset,
+            getTop() + (lineHeightWithPadding * row * getTextScale()) + verticalScrollingOffset,
+            right - horizontalScrollingOffset,
+            getTop() + (lineHeightWithPadding * ((row + 1) * getTextScale())) + verticalScrollingOffset,
+            if (active) selectionBackgroundColor else inactiveSelectionBackgroundColor,
+        )
+        if (text.isNotEmpty()) {
+            getFontProvider().extractMcScale(
+                extractor,
+                text,
+                if (active) selectionForegroundColor else inactiveSelectionForegroundColor,
+                left - horizontalScrollingOffset,
+                getTop() + ((lineHeightWithPadding * row + 1) * getTextScale()) + verticalScrollingOffset,
+                getTextScale(),
+                contentShadow,
+                contentShadowColor
+            )
+        }
+    }
+
     init {
         addUpdateFunc { _, _ -> update() }
     }
@@ -905,6 +981,15 @@ abstract class AbstractTextInput(
             scrollIntoView(cursor)
             cursorNeedsRefocus = false
         }
+
+        if (isActive()) {
+            updateTextInputArea()
+        }
+    }
+
+    private fun updateTextInputArea() {
+        val (x, y) = cursor.toScreenPos()
+        UKeyboard.setTextInputArea(x.toInt(), y.toInt(), x.toInt() + 1, ceil(y + lineHeight).toInt())
     }
 
     inner class LinePosition(val line: Int, val column: Int, val isVisual: Boolean) :

@@ -11,10 +11,8 @@
  */
 package gg.essential.mixins.transformers.server.integrated;
 
-import gg.essential.Essential;
-import gg.essential.network.connectionmanager.sps.SPSManager;
-import gg.essential.universal.UMinecraft;
-import gg.essential.util.ExtensionsKt;
+import gg.essential.mixins.ext.server.integrated.IntegratedServerExt;
+import gg.essential.sps.McIntegratedServerManager;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.GameType;
 import org.spongepowered.asm.mixin.Mixin;
@@ -27,16 +25,10 @@ public abstract class Mixin_SetGameType {
 
     @Inject(method = "setGameType", at = @At(value = "HEAD"), cancellable = true)
     public void onSetGameType(GameType gameMode, CallbackInfo ci) {
-        ExtensionsKt.getExecutor(UMinecraft.getMinecraft()).execute(() -> {
-            SPSManager sps = Essential.getInstance().getConnectionManager().getSpsManager();
-            if (sps.getLocalSession() != null && sps.getCurrentGameMode() != gameMode) {
-                sps.updateWorldSettings(
-                        sps.isAllowCheats(),
-                        gameMode,
-                        sps.getDifficulty(),
-                        sps.isDifficultyLocked()
-                );
-            }
-        });
+        McIntegratedServerManager manager = ((IntegratedServerExt) this).getEssential$manager();
+        if (manager.isDefaultGameModeControlledByState()) {
+            manager.updateServerDefaultGameMode(gameMode);
+            ci.cancel();
+        }
     }
 }

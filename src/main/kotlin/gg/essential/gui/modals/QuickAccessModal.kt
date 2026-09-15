@@ -42,7 +42,6 @@ import gg.essential.gui.menu.AccountManagerModal
 import gg.essential.gui.menu.RightSideBarNew.Companion.hostOrInviteButtonPressed
 import gg.essential.gui.overlay.ModalManager
 import gg.essential.gui.screenshot.components.ScreenshotBrowser
-import gg.essential.gui.sps.WorldShareSettingsGui
 import gg.essential.gui.util.pollingStateV2
 import gg.essential.gui.wardrobe.Wardrobe
 import gg.essential.key.EssentialKeybindingRegistry
@@ -94,15 +93,16 @@ class QuickAccessModal(modalManager: ModalManager) : Modal(modalManager) {
 
         // The following variables should match their equivalents in RightSideBarNew
         val hostable = UScreen.currentScreen.isMainMenu
+                || (UMinecraft.getMinecraft().currentServerData == null)
 
         val isHostingWorld = pollingStateV2 {
-            Essential.getInstance().connectionManager.spsManager.localSession != null
+            Essential.getInstance().worldsManager.integratedServerWorld.getUntracked()?.localWorldOpen?.getUntracked() ?: false
         }
 
         val hasInviteButton = memo {
             val currentServer = UMinecraft.getMinecraft().currentServerData
             val isSpsServer = currentServer?.let { SpsAddress.parse(it.serverIP) } != null
-            (!hostable && !isSpsServer) || isHostingWorld()
+            (!hostable && !isSpsServer)
         }
 
         val hostableOrHasInviteButton = memo { hostable || hasInviteButton() }
@@ -114,13 +114,6 @@ class QuickAccessModal(modalManager: ModalManager) : Modal(modalManager) {
         val notEmpty = " ".state()
 
         row (Arrangement.spacedBy(6f)) {
-
-            if_({ isHostingWorld() }) {
-                MenuButton {
-                    openScreenAndCloseModal { WorldShareSettingsGui() }
-                }.setIcon(EssentialPalette.HOST_5X.state())(
-                    buttonModifier.hoverScope().hoverTooltip("World Host Settings"))
-            }
 
             if_({ hostableOrHasInviteButton() && hasInviteButton() }) {
                 MenuButton(notEmpty) {
@@ -195,7 +188,7 @@ class QuickAccessModal(modalManager: ModalManager) : Modal(modalManager) {
         // Opens the quick access modal from a post screen key press event
         @Subscribe
         fun keyPressed(event: GuiKeyTypedEvent.Post) {
-            if (!EssentialKeybindingRegistry.getInstance().openQuickAccess.isKeyCode(event.keyCode)) return
+            if (!EssentialKeybindingRegistry.getInstance().openQuickAccess.isKeyCode(event.keyBindingKeyCode)) return
 
             val screen = event.screen
             if (screen != null && !screen.isMainMenu && screen !is GuiIngameMenu) return

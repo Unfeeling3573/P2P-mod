@@ -14,9 +14,19 @@ package gg.essential.gui.modals.select.component
 import gg.essential.elementa.dsl.effect
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.common.shadow.ShadowEffect
+import gg.essential.gui.friends.state.IStatusStates
+import gg.essential.gui.friends.state.PlayerActivity
+import gg.essential.gui.layoutdsl.Alignment
 import gg.essential.gui.layoutdsl.LayoutScope
 import gg.essential.gui.layoutdsl.Modifier
+import gg.essential.gui.layoutdsl.alignBoth
+import gg.essential.gui.layoutdsl.box
+import gg.essential.gui.layoutdsl.childBasedMaxSize
+import gg.essential.gui.layoutdsl.color
+import gg.essential.gui.layoutdsl.heightAspect
+import gg.essential.gui.layoutdsl.shadow
 import gg.essential.gui.layoutdsl.text
+import gg.essential.gui.layoutdsl.width
 import gg.essential.util.CachedAvatarImage
 import gg.essential.util.UuidNameLookup
 import java.awt.Color
@@ -27,6 +37,17 @@ fun LayoutScope.playerAvatar(uuid: UUID, modifier: Modifier = Modifier, shadowCo
         .effect(ShadowEffect(shadowColor))
 
     image(modifier)
+}
+
+fun LayoutScope.playerAvatarWithOnlineIndicator(uuid: UUID, activities: IStatusStates, modifier: Modifier = Modifier) {
+    box(Modifier.childBasedMaxSize().then(modifier)) {
+        playerAvatar(uuid, Modifier.shadow())
+        if_({ activities.getActivityState(uuid)() !is PlayerActivity.Offline }) {
+            // Green online indicator
+            box(Modifier.color(EssentialPalette.UPDATE_AVAILABLE_GREEN).width(2f).heightAspect(1f)
+                    .alignBoth(Alignment.End(-1f)).shadow(Color.BLACK))
+        }
+    }
 }
 
 fun LayoutScope.playerName(uuid: UUID, modifier: Modifier = Modifier) {

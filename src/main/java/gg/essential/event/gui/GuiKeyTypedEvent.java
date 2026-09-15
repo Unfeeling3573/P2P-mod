@@ -19,6 +19,7 @@ public class GuiKeyTypedEvent extends CancellableEvent {
     private final GuiScreen screen;
     private final char typedChar;
     private final int keyCode;
+    private final int scancode; // 1.16+ only; note that semantics differ between GLFW and SDL
 
     /**
      * Fired whenever a key is typed
@@ -27,10 +28,11 @@ public class GuiKeyTypedEvent extends CancellableEvent {
      * @param typedChar character that was typed
      * @param keyCode   keycode for the character that was typed
      */
-    public GuiKeyTypedEvent(GuiScreen screen, char typedChar, int keyCode) {
+    public GuiKeyTypedEvent(GuiScreen screen, char typedChar, int keyCode, int scancode) {
         this.screen = screen;
         this.typedChar = typedChar;
         this.keyCode = keyCode;
+        this.scancode = scancode;
     }
 
     public GuiScreen getScreen() {
@@ -45,6 +47,14 @@ public class GuiKeyTypedEvent extends CancellableEvent {
         return keyCode;
     }
 
+    public int getKeyBindingKeyCode() {
+        //#if MC >= 26.3
+        //$$ return scancode;
+        //#else
+        return keyCode;
+        //#endif
+    }
+
     public static class Post extends GuiKeyTypedEvent {
 
         /**
@@ -56,8 +66,8 @@ public class GuiKeyTypedEvent extends CancellableEvent {
          * @param typedChar character that was typed
          * @param keyCode   keycode for the character that was typed
          */
-        public Post(final GuiScreen screen, final char typedChar, final int keyCode) {
-            super(screen, typedChar, keyCode);
+        public Post(final GuiScreen screen, final char typedChar, final int keyCode, int scancode) {
+            super(screen, typedChar, keyCode, scancode);
         }
     }
 }

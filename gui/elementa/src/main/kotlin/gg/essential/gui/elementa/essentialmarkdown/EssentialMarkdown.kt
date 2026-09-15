@@ -16,6 +16,8 @@ import gg.essential.elementa.components.Window
 import gg.essential.elementa.constraints.HeightConstraint
 import gg.essential.elementa.dsl.pixels
 import gg.essential.elementa.events.UIEvent
+import gg.essential.elementa.font.extractMcScale
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.elementa.essentialmarkdown.drawables.BlockquoteDrawable
 import gg.essential.gui.elementa.essentialmarkdown.drawables.DrawableList
 import gg.essential.gui.elementa.essentialmarkdown.drawables.HeaderDrawable
@@ -210,6 +212,35 @@ class EssentialMarkdown(
         selection = null
     }
 
+    override fun extractComponent(extractor: ElementaExtractor) {
+        if (needsInitialLayout) {
+            update()
+        }
+
+        if (layoutFailed) {
+            getFontProvider().extractMcScale(extractor, "Failed to render markdown", Color(0xCC2929), getLeft(), getTop(), 10f)
+            return
+        }
+
+        val drawState = DrawState(getLeft() - baseX, getTop() - baseY)
+        val parentWindow = Window.of(this)
+
+        drawables.forEach {
+            if (!parentWindow.isAreaVisible(
+                    it.layout.left.toDouble() + drawState.xShift, it.layout.top.toDouble() + drawState.yShift,
+                    it.layout.right.toDouble() + drawState.xShift, it.layout.bottom.toDouble() + drawState.yShift
+                )) return@forEach
+            it.extract(extractor, drawState)
+        }
+        if (!disableSelection)
+            selection?.extract(extractor, drawState) ?: cursor?.extract(extractor, drawState)
+    }
+
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
+    @Suppress("DEPRECATION")
     override fun draw(matrixStack: UMatrixStack) {
         if (needsInitialLayout) {
             update()

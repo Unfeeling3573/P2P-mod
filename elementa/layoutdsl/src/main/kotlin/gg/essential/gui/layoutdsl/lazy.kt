@@ -14,6 +14,7 @@ package gg.essential.gui.layoutdsl
 import gg.essential.elementa.components.UIContainer
 import gg.essential.elementa.components.Window
 import gg.essential.elementa.components.inspector.Inspector
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.elementa.state.v2.MutableState
 import gg.essential.gui.elementa.state.v2.mutableStateOf
 import gg.essential.universal.UMatrixStack
@@ -39,7 +40,18 @@ fun LayoutScope.lazyBox(modifier: Modifier = Modifier.fillParent(), block: Layou
 }
 
 private class LazyComponent(private val initialized: MutableState<Boolean>) : UIContainer() {
+    override fun extractComponent(extractor: ElementaExtractor) {
+        Window.enqueueRenderOperation {
+            initialized.set(true)
+        }
+    }
+
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
     override fun draw(matrixStack: UMatrixStack) {
+        @Suppress("DEPRECATION")
         super.draw(matrixStack)
 
         Window.enqueueRenderOperation {

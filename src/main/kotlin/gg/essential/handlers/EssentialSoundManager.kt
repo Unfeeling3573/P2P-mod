@@ -179,6 +179,9 @@ object EssentialSoundManager {
 
         override fun getSoundLocation(): ResourceLocation = identifier
 
+        //#if MC >= 26.3
+        //$$ override fun getSoundEvent(): WeighedSoundEvents = soundSet
+        //#endif
         //#if MC>=11200
         override fun createAccessor(handler: SoundHandler): SoundEventAccessor = soundSet
         override fun getSound(): Sound = mcSound ?: SoundHandler.MISSING_SOUND

@@ -12,10 +12,10 @@
 package gg.essential.mixins.transformers.server.integrated;
 
 import com.llamalad7.mixinextras.sugar.Local;
-import gg.essential.Essential;
-import gg.essential.network.connectionmanager.sps.SPSManager;
-import gg.essential.universal.UMinecraft;
-import gg.essential.util.ExtensionsKt;
+import gg.essential.mixins.ext.server.integrated.IntegratedServerExt;
+import gg.essential.sps.McIntegratedServerManager;
+import net.minecraft.client.Minecraft;
+import net.minecraft.server.integrated.IntegratedServer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -30,16 +30,12 @@ public abstract class Mixin_SetDifficultyLocked {
 
     @Inject(method = "setDifficultyLocked", at = @At(value = "HEAD"), cancellable = true)
     public void onSetDifficultyLocked(CallbackInfo ci, @Local(argsOnly = true) boolean locked) {
-        ExtensionsKt.getExecutor(UMinecraft.getMinecraft()).execute(() -> {
-            SPSManager sps = Essential.getInstance().getConnectionManager().getSpsManager();
-            if (sps.getLocalSession() != null && sps.isDifficultyLocked() != locked) {
-                sps.updateWorldSettings(
-                        sps.isAllowCheats(),
-                        sps.getCurrentGameMode(),
-                        sps.getDifficulty(),
-                        locked
-                );
-            }
-        });
+        IntegratedServer server = Minecraft.getMinecraft().getIntegratedServer();
+        if (server == null || !server.isCallingFromMinecraftThread()) return;
+        McIntegratedServerManager manager = ((IntegratedServerExt) server).getEssential$manager();
+        if (manager.isDifficultyLockedControlledByState()) {
+            manager.updateServerDifficultyLocked(locked);
+            ci.cancel();
+        }
     }
 }

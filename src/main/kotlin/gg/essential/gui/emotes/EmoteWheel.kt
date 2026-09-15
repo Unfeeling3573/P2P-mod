@@ -135,6 +135,8 @@ class EmoteWheel : WindowScreen(
     private var equipping = false
 
     init {
+        useElementaRenderer = true
+
         // Allow the player to move while the emote wheel is open
         //#if MC>=12000
         //$$ // Now handled by Mixin_AllowMovementDuringScreens

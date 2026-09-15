@@ -245,7 +245,8 @@ object McEssentialConfig {
     }
 
     private fun checkSPS(): Boolean {
-        val currentlyHosting = Essential.getInstance().connectionManager.spsManager.localSession != null
+        val worldsManager = Essential.getInstance().worldsManager
+        val currentlyHosting = Essential.getInstance().worldsManager.integratedServerWorld.getUntracked()?.localWorldOpen?.getUntracked() == true
         return if (currentlyHosting) {
             Notifications.error("Error", "You cannot disable Essential while hosting a world.")
             false

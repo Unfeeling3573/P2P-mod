@@ -13,9 +13,12 @@ package gg.essential.gui.screenshot.providers
 
 import gg.essential.Essential
 import gg.essential.gui.screenshot.ScreenshotId
+import gg.essential.gui.screenshot.downsampling.ErrorImage
 import gg.essential.gui.screenshot.downsampling.PixelBuffer
 import gg.essential.gui.screenshot.image.PixelBufferTexture
+import gg.essential.universal.UGraphics
 import gg.essential.universal.UMinecraft
+import gg.essential.universal.render.UGpuTexture
 import gg.essential.util.OperatingSystem
 import gg.essential.util.RefCounted
 import gg.essential.util.executor
@@ -25,6 +28,7 @@ import org.lwjgl.opengl.GL11
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
+//#if MC < 26.3
 //#if MC<11600
 import org.lwjgl.opengl.Display
 import org.lwjgl.opengl.SharedDrawable
@@ -34,6 +38,7 @@ import org.lwjgl.opengl.SharedDrawable
 //$$ import org.lwjgl.opengl.GL
 //$$ import org.lwjgl.system.MemoryStack
 //$$ import org.lwjgl.system.MemoryUtil
+//#endif
 //#endif
 /**
  * Provides a unique Minecraft ResourceLocation for each screenshot depending on name and resolution
@@ -48,7 +53,7 @@ class MinecraftWindowedTextureProvider(
     //No auto expire rule here, we will be manually maintaining the contents of the cache
     private val loaded = mutableMapOf<ScreenshotId, RegisteredTexture>()
 
-    private val loading = mutableMapOf<ScreenshotId, RegisteredTexture>()
+    private val loading = mutableSetOf<ScreenshotId>()
 
     override var items: List<ScreenshotId> by sourceProvider::items
 
@@ -71,18 +76,26 @@ class MinecraftWindowedTextureProvider(
             processed[id] = loaded[id] ?: continue
         }
 
-        for (entry in sourceProvider.provide(windows, optional + loaded.keys + loading.keys)) {
+        for (entry in sourceProvider.provide(windows, optional + loaded.keys + loading)) {
             val id = entry.key
 
-            if (id !in loaded && id !in loading && id !in optional) {
-                textureManager.createResource(id, entry.value)
+            if (entry.value is ErrorImage) {
+                val texture = RegisteredTexture(null)
+                loaded[id] = texture
+                if (id in requestedIds) {
+                    processed[id] = texture
+                }
+            } else if (id !in loaded && id !in loading && id !in optional) {
+                loading.add(id)
+                textureManager.upload(id, entry.value)
             }
 
             entry.value.release()
         }
 
-        for (id in textureManager.getFinished()) {
-            val resourceLocation = loading.remove(id)!!
+        for ((id, gpuTexture) in textureManager.getFinished()) {
+            loading.remove(id)
+            val resourceLocation = RegisteredTexture(UGraphics.getDevice().createTextureView(gpuTexture))
             loaded[id] = resourceLocation
             if (id in requestedIds) {
                 processed[id] = resourceLocation
@@ -120,18 +133,6 @@ class MinecraftWindowedTextureProvider(
             true
         }
     }
-
-    private fun AsyncTextureManager.createResource(id: ScreenshotId, image: PixelBuffer) {
-        val texture = PixelBufferTexture(id.toString(), image)
-        loading[id] = RegisteredTexture(texture.uGpuTextureView)
-        image.retain()
-        upload(id) {
-            texture.upload(image)
-            image.release()
-            texture
-        }
-    }
-
 
     private fun onRemoval(texture: RegisteredTexture) {
         UMinecraft.getMinecraft().executor.execute {
@@ -174,7 +175,9 @@ private fun makeUploadBackend(): UploadBackend {
         return NotAsyncUploadBackend()
     }
 
-    //#if MC>=11600
+    //#if MC >= 26.3
+    //$$ return NotAsyncUploadBackend()
+    //#elseif MC>=11600
     //$$ val mcWindow = GLFW.glfwGetCurrentContext()
     //$$
     //$$ fun createWindow(version: Pair<Int, Int>?): Long {
@@ -308,6 +311,7 @@ abstract class AsyncUploadBackend : UploadBackend {
     }
 }
 
+//#if MC < 26.3
 //#if MC<11600
 class AsyncUploadBackendImpl : AsyncUploadBackend() {
 
@@ -339,6 +343,7 @@ class AsyncUploadBackendImpl : AsyncUploadBackend() {
 //$$
 //$$ }
 //#endif
+//#endif
 
 class NotAsyncUploadBackend : UploadBackend {
     override fun submit(block: () -> Unit) {
@@ -363,11 +368,14 @@ class AsyncTextureManager {
     private val complete = mutableMapOf<ScreenshotId, PixelBufferTexture>()
 
     /**
-     * Schedules the [texture] function to be called on a worker thread.
+     * Schedules the [content] to be uploaded to GPU memory on a worker thread.
      */
-    fun upload(id: ScreenshotId, texture: () -> PixelBufferTexture) {
+    fun upload(id: ScreenshotId, content: PixelBuffer) {
+        val texture = PixelBufferTexture(id.toString(), content)
+        content.retain()
         uploadBackend.submit {
-            val pixelBufferTexture = texture()
+            texture.upload(content)
+            content.release()
 
             if (uploadBackend is AsyncUploadBackend) {
                 GL11.glFlush()
@@ -375,19 +383,19 @@ class AsyncTextureManager {
 
             UMinecraft.getMinecraft().executor.execute {
                 synchronized(complete) {
-                    complete[id] = pixelBufferTexture
+                    complete[id] = texture
                 }
             }
         }
     }
 
     /**
-     * Returns the list of ids that had their textures uploaded since the last call to getFinished()
+     * Returns the list of id-texture pairs that have been uploaded since the last call to getFinished()
      */
-    fun getFinished(): Set<ScreenshotId> {
+    fun getFinished(): List<Pair<ScreenshotId, UGpuTexture>> {
         //Clone the entries that are loaded
         return synchronized(complete) {
-            complete.keys.toSet().also { complete.clear() }
+            complete.map { it.key to it.value.uGpuTexture }.also { complete.clear() }
         }
     }
 

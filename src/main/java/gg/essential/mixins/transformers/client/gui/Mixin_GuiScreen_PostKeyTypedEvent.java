@@ -42,7 +42,7 @@ public class Mixin_GuiScreen_PostKeyTypedEvent {
             //#if MC>=12109
             //$$ final KeyInput input, final CallbackInfoReturnable<Boolean> cir
             //#elseif MC>=11600
-            //$$ int keyCode, int scanCode, int modifiers, final CallbackInfoReturnable<Boolean> cir
+            //$$ int keyCode, int scancode, int modifiers, final CallbackInfoReturnable<Boolean> cir
             //#else
             char typedChar, int keyCode, CallbackInfo ci
             //#endif
@@ -53,11 +53,17 @@ public class Mixin_GuiScreen_PostKeyTypedEvent {
         //$$ if (cir.getReturnValue()) return;
         //$$
         //$$ char typedChar = '\0';
+        //#else
+        int scancode = -1;
         //#endif
 
-        //#if MC>=12109
+        //#if MC >= 26.3
+        //$$ int keyCode = input.keycode();
+        //$$ int scancode = input.key();
+        //#elseif MC >= 1.21.9
         //$$ int keyCode = input.getKeycode();
+        //$$ int scancode = input.scancode();
         //#endif
-        Essential.EVENT_BUS.post(new GuiKeyTypedEvent.Post((GuiScreen) (Object) this, typedChar, keyCode));
+        Essential.EVENT_BUS.post(new GuiKeyTypedEvent.Post((GuiScreen) (Object) this, typedChar, keyCode, scancode));
     }
 }

@@ -11,11 +11,13 @@
  */
 package gg.essential.gui.friends.state
 
+import gg.essential.Essential
 import gg.essential.connectionmanager.common.enums.ProfileStatus
 import gg.essential.gui.elementa.state.v2.MutableState
 import gg.essential.gui.elementa.state.v2.ReferenceHolderImpl
 import gg.essential.gui.elementa.state.v2.mutableStateOf
 import gg.essential.gui.elementa.state.v2.State
+import gg.essential.gui.elementa.state.v2.collections.effectOnChange
 import gg.essential.network.connectionmanager.profile.ProfileManager
 import gg.essential.network.connectionmanager.sps.SPSManager
 import gg.essential.sps.SpsAddress
@@ -34,15 +36,21 @@ class StatusStateManagerImpl(
     private val refHolder = ReferenceHolderImpl()
 
     private val statesMap = mutableMapOf<UUID, MutableState<PlayerActivity>>()
+    private val remoteSpsSessions = Essential.getInstance().worldsManager.remoteSpsSessions
 
     init {
         profileManager.registerStateManager(this)
         spsManager.registerStateManager(this)
 
+        remoteSpsSessions.effectOnChange(
+            refHolder,
+            add = { refreshActivity(it.value.hostUUID) },
+            remove = { refreshActivity(it.value.hostUUID) },
+        )
     }
 
     private fun haveSpsSession(host: UUID): Boolean {
-        return spsManager.remoteSessions.any { it.hostUUID == host }
+        return remoteSpsSessions.getUntracked().any { it.hostUUID == host }
     }
 
     override fun getActivityState(uuid: UUID): State<PlayerActivity> = getWritableState(uuid)
@@ -81,12 +89,12 @@ class StatusStateManagerImpl(
 
     override fun joinSession(uuid: UUID): Boolean {
         val activity = getActivity(uuid)
-        val address = when {
-            activity is PlayerActivity.Multiplayer -> activity.serverAddress
-            activity is PlayerActivity.SPSSession && activity.invited -> SpsAddress(uuid).toString()
+        val (address, playerUuidForServerName) = when {
+            activity is PlayerActivity.Multiplayer -> activity.serverAddress to uuid
+            activity is PlayerActivity.SPSSession && activity.invited -> SpsAddress(activity.host).toString() to activity.host
             else -> return false
         }
-        UUIDUtil.getName(uuid).thenAcceptOnMainThread {
+        UUIDUtil.getName(playerUuidForServerName).thenAcceptOnMainThread {
             MinecraftUtils.connectToServer(it, address)
         }
         return true

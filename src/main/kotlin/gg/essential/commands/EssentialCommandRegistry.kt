@@ -19,6 +19,9 @@ import gg.essential.commands.impl.*
 import gg.essential.config.EssentialConfig
 import gg.essential.event.network.chat.SendCommandEvent
 import gg.essential.gui.elementa.state.v2.ReferenceHolderImpl
+import gg.essential.gui.elementa.state.v2.effect
+import gg.essential.gui.elementa.state.v2.memo
+import gg.essential.sps.WorldsManager
 import gg.essential.universal.ChatColor
 import gg.essential.util.MinecraftUtils
 import gg.essential.util.Multithreading
@@ -61,6 +64,19 @@ object EssentialCommandRegistry : CommandRegistry {
             registerCommand(message)
             registerCommand(commandSession)
             registerCommand(invite)
+        }
+    }
+
+    fun registerSPSHostCommandsState(worldsManager: WorldsManager) {
+        val shouldBeRegistered = memo {
+            worldsManager.integratedServerWorld()?.localWorldOpen() == true
+        }
+        effect(refHolder) {
+            if (shouldBeRegistered()) {
+                registerSPSHostCommands()
+            } else {
+                unregisterSPSHostCommands()
+            }
         }
     }
 

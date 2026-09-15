@@ -12,14 +12,16 @@
 package gg.essential.gui.effects
 
 import gg.essential.elementa.effects.Effect
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
 import gg.essential.gui.elementa.state.v2.State
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
 import gg.essential.universal.render.URenderPipeline
 import gg.essential.universal.shader.BlendState
-import gg.essential.universal.vertex.UBufferBuilder
 import org.intellij.lang.annotations.Language
 import java.awt.Color
+import kotlin.math.roundToInt
 
 /**
  * Draws a gradient (smooth color transition) behind the bound component.
@@ -35,7 +37,7 @@ class GradientEffect(
     private val bottomLeft: State<Color>,
     private val bottomRight: State<Color>,
 ) : Effect() {
-    override fun beforeChildrenDraw(matrixStack: UMatrixStack) {
+    override fun extractBeforeChildren(extractor: ElementaExtractor) {
         val topLeft = this.topLeft.getUntracked()
         val topRight = this.topRight.getUntracked()
         val bottomLeft = this.bottomLeft.getUntracked()
@@ -43,19 +45,30 @@ class GradientEffect(
 
         val dither = topLeft != topRight || topLeft != bottomLeft || bottomLeft != bottomRight
 
-        val buffer = UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_COLOR)
+        val x1 = (boundComponent.getLeft() * extractor.guiScale).roundToInt()
+        val y1 = (boundComponent.getTop() * extractor.guiScale).roundToInt()
+        val x2 = (boundComponent.getRight() * extractor.guiScale).roundToInt()
+        val y2 = (boundComponent.getBottom() * extractor.guiScale).roundToInt()
 
-        val x1 = boundComponent.getLeft().toDouble()
-        val x2 = boundComponent.getRight().toDouble()
-        val y1 = boundComponent.getTop().toDouble()
-        val y2 = boundComponent.getBottom().toDouble()
+        extractor.custom(
+            x1, y1, x2, y2,
+            if (dither) PIPELINE_DITHERED else PIPELINE_FLAT,
+            emptyList(),
+            4,
+        ) { buffer, _, _ ->
+            buffer.pos(UMatrixStack.UNIT, x2.toDouble(), y1.toDouble(), 0.0).color(topRight).endVertex()
+            buffer.pos(UMatrixStack.UNIT, x1.toDouble(), y1.toDouble(), 0.0).color(topLeft).endVertex()
+            buffer.pos(UMatrixStack.UNIT, x1.toDouble(), y2.toDouble(), 0.0).color(bottomLeft).endVertex()
+            buffer.pos(UMatrixStack.UNIT, x2.toDouble(), y2.toDouble(), 0.0).color(bottomRight).endVertex()
+        }
+    }
 
-        buffer.pos(matrixStack, x2, y1, 0.0).color(topRight).endVertex()
-        buffer.pos(matrixStack, x1, y1, 0.0).color(topLeft).endVertex()
-        buffer.pos(matrixStack, x1, y2, 0.0).color(bottomLeft).endVertex()
-        buffer.pos(matrixStack, x2, y2, 0.0).color(bottomRight).endVertex()
-
-        buffer.build()?.drawAndClose(if (dither) PIPELINE_DITHERED else PIPELINE_FLAT)
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Use `extract` instead.",
+        replaceWith = ReplaceWith("extractBeforeChildren(extractor)")
+    )
+    override fun beforeChildrenDraw(matrixStack: UMatrixStack) {
+        extractBeforeChildren(ImmediateElementaExtractor(matrixStack))
     }
 
     companion object {
@@ -93,7 +106,6 @@ class GradientEffect(
             fragSource,
         ).apply {
             blendState = BlendState.ALPHA
-            depthTest = URenderPipeline.DepthTest.Always
         }.build()
 
         private val PIPELINE_FLAT = URenderPipeline.builderWithDefaultShader(
@@ -102,7 +114,6 @@ class GradientEffect(
             UGraphics.CommonVertexFormats.POSITION_COLOR,
         ).apply {
             blendState = BlendState.ALPHA
-            depthTest = URenderPipeline.DepthTest.Always
         }.build()
     }
 }

@@ -12,7 +12,9 @@
 package gg.essential.gui.common
 
 import gg.essential.elementa.UIComponent
-import gg.essential.elementa.components.UIBlock.Companion.drawBlock
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
+import gg.essential.elementa.renderer.fillMcScale
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.elementa.state.v2.MutableState
 import gg.essential.gui.elementa.state.v2.combinators.bimap
@@ -42,33 +44,38 @@ class RadioButton(
         }.applyToComponent(this)
     }
 
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
     override fun draw(matrixStack: UMatrixStack) {
+        @Suppress("DEPRECATION")
         beforeDraw(matrixStack)
-
-        val x = getLeft().toDouble()
-        val y = getTop().toDouble()
-
-        matrixStack.push()
-        matrixStack.translate(1f, 1f, 0f)
-        drawInner(matrixStack, EssentialPalette.BLACK, x, y)
-        matrixStack.pop()
-
-        drawInner(matrixStack, if (state.getUntracked()) selectedColor else getColor(), x, y)
-
+        extractComponent(ImmediateElementaExtractor(matrixStack))
+        @Suppress("DEPRECATION")
         super.draw(matrixStack)
     }
 
-    private fun drawInner(matrixStack: UMatrixStack, color: Color, x: Double, y: Double) {
-        drawBlock(matrixStack, color, x, y + 2, x + 1, y + 5)
-        drawBlock(matrixStack, color, x + 1, y + 1, x + 2, y + 2)
-        drawBlock(matrixStack, color, x + 1, y + 5, x + 2, y + 6)
-        drawBlock(matrixStack, color, x + 2, y, x + 5, y + 1)
-        drawBlock(matrixStack, color, x + 2, y + 6, x + 5, y + 7)
-        drawBlock(matrixStack, color, x + 5, y + 1, x + 6, y + 2)
-        drawBlock(matrixStack, color, x + 5, y + 5, x + 6, y + 6)
-        drawBlock(matrixStack, color, x + 6, y + 2, x + 7, y + 5)
+    override fun extractComponent(extractor: ElementaExtractor) {
+        val x = getLeft()
+        val y = getTop()
+
+        extractInner(extractor, EssentialPalette.BLACK, x + 1, y + 1)
+
+        extractInner(extractor, if (state.getUntracked()) selectedColor else getColor(), x, y)
+    }
+
+    private fun extractInner(extractor: ElementaExtractor, color: Color, x: Float, y: Float) {
+        extractor.fillMcScale(x, y + 2, x + 1, y + 5, color)
+        extractor.fillMcScale(x + 1, y + 1, x + 2, y + 2, color)
+        extractor.fillMcScale(x + 1, y + 5, x + 2, y + 6, color)
+        extractor.fillMcScale(x + 2, y, x + 5, y + 1, color)
+        extractor.fillMcScale(x + 2, y + 6, x + 5, y + 7, color)
+        extractor.fillMcScale(x + 5, y + 1, x + 6, y + 2, color)
+        extractor.fillMcScale(x + 5, y + 5, x + 6, y + 6, color)
+        extractor.fillMcScale(x + 6, y + 2, x + 7, y + 5, color)
         if (state.getUntracked()) {
-            drawBlock(matrixStack, color, x + 2, y + 2, x + 5, y + 5)
+            extractor.fillMcScale(x + 2, y + 2, x + 5, y + 5, color)
         }
     }
 }

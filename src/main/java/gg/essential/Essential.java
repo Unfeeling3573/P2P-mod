@@ -57,6 +57,9 @@ import gg.essential.network.connectionmanager.skins.PlayerSkinLookup;
 import gg.essential.network.connectionmanager.telemetry.FeatureSessionTelemetry;
 import gg.essential.network.mojang.ManagedMojangProfileApi;
 import gg.essential.sps.McIntegratedServerManager;
+import gg.essential.sps.McLocalResourcePackIndex;
+import gg.essential.sps.McSharedResourcePacksManager;
+import gg.essential.sps.McWorldsManager;
 import gg.essential.sps.WindowTitleManager;
 import gg.essential.universal.UMinecraft;
 import gg.essential.util.*;
@@ -87,9 +90,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-//#if MC == 26.2
+//#if MC >= 26.2 && MC < 26.4
 //$$ import org.lwjgl.opengl.ARBClipControl;
 //$$ import org.lwjgl.opengl.GL;
+//#endif
+
+//#if MC >= 1.17
+//$$ import java.lang.invoke.CallSite;
+//$$ import java.lang.invoke.LambdaMetafactory;
+//$$ import java.lang.invoke.MethodHandle;
+//$$ import java.lang.invoke.MethodHandles;
+//$$ import java.lang.invoke.MethodType;
 //#endif
 
 //#if MC>=11400
@@ -127,10 +138,17 @@ public class Essential implements EssentialAPI {
     private final File baseDir = createEssentialDir();
     public final boolean isNewInstallation = !new File(baseDir, "config.toml").exists();
 
-    private final Lwjgl3Loader lwjgl3 = new Lwjgl3Loader(baseDir.toPath().resolve("lwjgl3-natives"), GLUtil.INSTANCE.isGL30());
+    private final Lwjgl3Loader lwjgl3 = new Lwjgl3Loader(baseDir.toPath().resolve("lwjgl3-natives"));
     private final MutableState<@Nullable McIntegratedServerManager> integratedServerManager = mutableStateOf(null);
     @NotNull
     private final ConnectionManager connectionManager = new ConnectionManager(new NetworkHook(), baseDir, lwjgl3, integratedServerManager);
+    private final McWorldsManager worldsManager = new McWorldsManager(
+        connectionManager,
+        UMinecraft.getMinecraft().mcDataDir.toPath().resolve("saves"),
+        integratedServerManager
+    );
+    private final McSharedResourcePacksManager sharedResourcePacksManager = new McSharedResourcePacksManager(worldsManager, integratedServerManager);
+    private final McLocalResourcePackIndex mcLocalResourcePackIndex = new McLocalResourcePackIndex(baseDir.toPath());
     private final List<SessionFactory> sessionFactories = new ArrayList<>();
     private ImageCache imageCache;
 
@@ -176,6 +194,21 @@ public class Essential implements EssentialAPI {
     }
 
     @NotNull
+    public McWorldsManager getWorldsManager() {
+        return this.worldsManager;
+    }
+
+    @NotNull
+    public McSharedResourcePacksManager getSharedResourcePacksManager() {
+        return sharedResourcePacksManager;
+    }
+
+    @NotNull
+    public McLocalResourcePackIndex getMcLocalResourcePackIndex() {
+        return this.mcLocalResourcePackIndex;
+    }
+
+    @NotNull
     public EssentialKeybindingRegistry getKeybindingRegistry() {
         return EssentialKeybindingRegistry.getInstance();
     }
@@ -215,6 +248,8 @@ public class Essential implements EssentialAPI {
         Multithreading.runAsync(() -> AutoUpdate.INSTANCE.getClass());
         Multithreading.runAsync(() -> {
             EssentialPalette.INSTANCE.getClass();
+            EssentialPalette.INSTANCE.getMINECRAFT_TEN();
+            EssentialPalette.INSTANCE.getMINECRAFT_FIVE();
             ResourceImageFactory.Companion.preload();
         });
     }
@@ -235,14 +270,12 @@ public class Essential implements EssentialAPI {
         EVENT_BUS.register(new Object() {
             @Subscribe
             public void handleDraw(GuiDrawScreenEvent.Priority event) {
-                //#if MC == 26.3
+                //#if MC >= 26.4
                 //$$ TODO check if this is still needed
-                //#else
-                //#if MC == 26.2
+                //#elseif MC >= 26.2
                 //$$ if (ModLoaderUtil.INSTANCE.isModLoaded("iris") && !GuiEssentialPlatform.Companion.getPlatform().isZZeroToOne() && GL.getCapabilities().GL_ARB_clip_control) {
                 //$$     ARBClipControl.glClipControl(ARBClipControl.GL_LOWER_LEFT, ARBClipControl.GL_NEGATIVE_ONE_TO_ONE);
                 //$$ }
-                //#endif
                 //#endif
                 EVENT_BUS.unregister(this);
             }
@@ -294,6 +327,7 @@ public class Essential implements EssentialAPI {
         }
 
         EventHandler.init();
+        ShutdownHook.INSTANCE.register(sharedResourcePacksManager::close);
         StencilEffect.Companion.enableStencil();
         McEssentialConfig.INSTANCE.hookUp();
         //#if MC<11400
@@ -304,15 +338,13 @@ public class Essential implements EssentialAPI {
         PlayerSkinLookup.INSTANCE.loadCache(getBaseDir().toPath().resolve("cache"));
 
         EVENT_BUS.register(EssentialCommandRegistry.INSTANCE);
+        EssentialCommandRegistry.INSTANCE.registerSPSHostCommandsState(worldsManager);
         getKeybindingRegistry().refreshBinds(); // config is ready now, time to refresh which bindings we actually want
         registerListener(getKeybindingRegistry());
         registerListenerRequiresEssential(new NetworkSubscriptionStateHandler());
         registerListener(MinecraftUtils.INSTANCE);
         registerListenerRequiresEssential(new ServerStatusHandler());
         registerListener(GuiUtil.INSTANCE);
-        //#if MC>=12106
-        //$$ registerListener(AdvancedDrawContext.INSTANCE);
-        //#endif
         registerListener(new PauseMenuDisplay());
         registerListenerRequiresEssential(DiscordIntegration.INSTANCE);
         registerListener(new OptionsScreenOverlay());
@@ -332,6 +364,7 @@ public class Essential implements EssentialAPI {
         ));
 
         Net.INSTANCE.init();
+        gg.essential.sps.packets.SpsNet.INSTANCE.registerPackets();
         Multithreading.runAsync(() -> {
             try {
                 EssentialContainerUtil.updateStage1IfOutdated(UMinecraft.getMinecraft().mcDataDir.toPath());
@@ -343,6 +376,7 @@ public class Essential implements EssentialAPI {
         registerListener(Notifications.INSTANCE);
         registerListener(new ReAuthChecker());
         registerListener(UI3DPlayer.Companion);
+        mcLocalResourcePackIndex.update(false);
         WindowTitleManager.INSTANCE.register();
 
         //#if MC<11400
@@ -444,6 +478,22 @@ public class Essential implements EssentialAPI {
     }
 
     private static InvokerType determineBestInvokerType() {
+        //#if MC >= 1.17
+        //$$ MethodHandles.Lookup lookup = MethodHandles.lookup();
+        //$$ return (object, clazz, parameterClazz, method) -> {
+        //$$     MethodHandles.Lookup privateLookup = MethodHandles.privateLookupIn(clazz, lookup);
+        //$$     MethodType subscription = MethodType.methodType(void.class, parameterClazz);
+        //$$     CallSite site = LambdaMetafactory.metafactory(
+        //$$         privateLookup,
+        //$$         "invoke",
+        //$$         MethodType.methodType(InvokerType.SubscriberMethod.class, clazz),
+        //$$         subscription.changeParameterType(0, Object.class),
+        //$$         privateLookup.findVirtual(clazz, method.getName(), subscription),
+        //$$         subscription
+        //$$     );
+        //$$     return (InvokerType.SubscriberMethod) site.getTarget().bindTo(object).invokeExact();
+        //$$ };
+        //#else
         if (System.getProperty("java.vm.name", "").contains("OpenJ9")) {
             // LMFInvoker doesn't currently support OpenJ9, so we won't bother trying.
             return new ReflectionInvoker();
@@ -461,6 +511,7 @@ public class Essential implements EssentialAPI {
             logger.error("Could not set up LMFInvoker: ", e);
             return new ReflectionInvoker();
         }
+        //#endif
     }
 
     @Subscribe

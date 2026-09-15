@@ -177,8 +177,8 @@ public class ConnectionManager extends ConnectionManagerKt {
         // Notices
         this.managers.add((this.noticesManager = new NoticesManager(this)));
 
-        noticesManager.register(noticeBannerManager = new NoticeBannerManager(noticesManager));
-        noticesManager.register(new PersistentToastNoticeListener(noticesManager));
+        noticeBannerManager = new NoticeBannerManager(noticesManager);
+        new PersistentToastNoticeListener(refHolder, noticesManager);
 
         // Disabled Features
         this.managers.add(this.disabledFeaturesManager = new DisabledFeaturesManager(this));
@@ -187,8 +187,8 @@ public class ConnectionManager extends ConnectionManagerKt {
         this.cosmeticsManager = new CosmeticsManager(this, baseDir);
         this.managers.add(this.cosmeticsManager);
         this.managers.add(this.cosmeticsManager.getInfraEquippedOutfitsManager());
-        noticesManager.register(cosmeticNotices = new CosmeticNotices(noticesManager, cosmeticsManager.getCosmeticsData()));
-        noticesManager.register(saleNoticeManager = new SaleNoticeManager());
+        cosmeticNotices = new CosmeticNotices(noticesManager, cosmeticsManager.getCosmeticsData());
+        saleNoticeManager = new SaleNoticeManager(noticesManager);
         noticesManager.register(new GiftedCosmeticNoticeListener(noticesManager, cosmeticsManager.getCosmeticsData()));
 
         // Relationships

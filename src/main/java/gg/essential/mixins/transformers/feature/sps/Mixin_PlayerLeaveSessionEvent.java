@@ -15,7 +15,7 @@ import com.mojang.authlib.GameProfile;
 import gg.essential.Essential;
 import gg.essential.event.sps.PlayerLeaveSessionEvent;
 import gg.essential.mixins.ext.server.integrated.IntegratedServerExt;
-import gg.essential.network.connectionmanager.sps.SPSManager;
+import gg.essential.sps.WorldManager;
 import gg.essential.util.ExtensionsKt;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -49,8 +49,8 @@ public class Mixin_PlayerLeaveSessionEvent {
                 remove(((IntegratedServerExt) server).getEssential$manager().getConnectedPlayers(), uuid);
             }
 
-            final SPSManager spsManager = Essential.getInstance().getConnectionManager().getSpsManager();
-            if (spsManager.getLocalSession() != null) {
+            WorldManager worldManager = Essential.getInstance().getWorldsManager().getIntegratedServerWorld().getUntracked();
+            if (worldManager != null && worldManager.getLocalWorldOpen().getUntracked()) {
                 Essential.EVENT_BUS.post(new PlayerLeaveSessionEvent(gameProfile));
             }
         });

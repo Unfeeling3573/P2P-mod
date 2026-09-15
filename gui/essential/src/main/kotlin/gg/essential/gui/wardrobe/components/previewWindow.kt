@@ -645,7 +645,12 @@ private fun LayoutScope.purchaseBannerContentOld(state: WardrobeState, modifier:
                     }
                 }
 
-                if (state.coins.get() < cost.get()) {
+                val coins = state.coins.getUntracked()
+                if (coins == null) {
+                    purchaseCallback(false)
+                    return@handleClick
+                }
+                if (coins < cost.get()) {
                     CoinsPurchaseModal.open(state, cost.getUntracked())
                 } else {
                     platform.pushModal { manager ->

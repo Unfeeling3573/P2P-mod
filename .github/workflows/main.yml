@@ -45,6 +45,10 @@ jobs:
           while read -r alias source; do
             platform_checksums["$alias"]="${platform_checksums["$source"]}"
           done < versions/aliases.txt
+          
+          while read -r exclusion; do
+            unset platform_checksums["$exclusion"]
+          done < versions/exclusions.txt
 
           version="$(grep "^version=" gradle.properties | cut -d'=' -f2)"
 

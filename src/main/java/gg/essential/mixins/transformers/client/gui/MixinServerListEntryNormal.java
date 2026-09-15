@@ -24,6 +24,8 @@ import gg.essential.network.connectionmanager.serverdiscovery.NewServerDiscovery
 import gg.essential.sps.SpsAddress;
 import gg.essential.universal.UMatrixStack;
 import gg.essential.universal.UMinecraft;
+import gg.essential.util.McElementaExtractor;
+import gg.essential.util.UDrawContext;
 import gg.essential.util.UUIDUtil;
 import net.minecraft.client.gui.GuiMultiplayer;
 import net.minecraft.client.gui.ServerListEntryNormal;
@@ -176,19 +178,27 @@ public abstract class MixinServerListEntryNormal
         //#endif
         CallbackInfo ci
     ) {
+        // Early return to avoid some of the wasteful calls in 1.21.6+
+        if (!this.friends.needsToDraw()) return;
+
         //#if MC>=12109
         //$$ int x = this.getContentX();
         //$$ int y = this.getContentY();
         //$$ int listWidth = this.getContentWidth();
         //#endif
-        //#if MC>=12000
-        //$$ UMatrixStack matrixStack = new UMatrixStack(context.getMatrices());
-        //#elseif MC>=11602
-        //$$ UMatrixStack matrixStack = new UMatrixStack(vMatrixStack);
-        //#else
-        UMatrixStack matrixStack = new UMatrixStack();
-        //#endif
-        String tooltip = this.friends.draw(matrixStack, x, y, listWidth, mouseX, mouseY, populationOrVersionTextWidth);
+
+        McElementaExtractor extractor = new McElementaExtractor(new UDrawContext(
+            //#if MC >= 1.20
+            //$$ context,
+            //$$ new UMatrixStack(context.getMatrices())
+            //#elseif MC >= 1.16
+            //$$ new UMatrixStack(vMatrixStack)
+            //#else
+            new UMatrixStack()
+            //#endif
+        ));
+
+        String tooltip = this.friends.extract(extractor, x, y, listWidth, mouseX, mouseY, populationOrVersionTextWidth);
         if (tooltip != null) {
             //#if MC>=12106
             //$$ context.drawTooltip(Arrays.stream(tooltip.split("\n")).map(HelpersKt::textLiteral).map(Text::asOrderedText).collect(Collectors.toList()), mouseX, mouseY);
@@ -200,6 +210,8 @@ public abstract class MixinServerListEntryNormal
             this.owner.setHoveringText(tooltip);
             //#endif
         }
+
+        extractor.close();
     }
 
     //#if MC>=11600

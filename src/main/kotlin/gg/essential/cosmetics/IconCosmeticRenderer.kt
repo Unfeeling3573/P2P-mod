@@ -26,7 +26,6 @@ import gg.essential.universal.UMatrixStack
 import gg.essential.universal.shader.BlendState
 import gg.essential.util.UDrawContext
 import gg.essential.util.identifier
-import net.minecraft.client.Minecraft
 import net.minecraft.client.entity.AbstractClientPlayer
 import net.minecraft.client.network.NetworkPlayerInfo
 import net.minecraft.entity.Entity
@@ -40,6 +39,7 @@ import java.util.UUID
 //#endif
 
 //#if MC>=11600
+//$$ import net.minecraft.client.Minecraft
 //$$ import net.minecraft.client.renderer.IRenderTypeBuffer
 //#endif
 
@@ -183,7 +183,7 @@ object IconCosmeticRenderer {
         color: Int,
         backgroundColor: Int,
         icon: ModelInstance?,
-        str: String,
+        stringWidth: Int,
         light: Int
     ) {
         // FIXME kotlin mangles the function name if an inline class is used (despite the function resolving fine in intellij)
@@ -191,7 +191,6 @@ object IconCosmeticRenderer {
         val color = Color.argb(color.toUInt())
         val backgroundColor = Color.argb(backgroundColor.toUInt())
 
-        val stringWidth = Minecraft.getMinecraft().fontRenderer.getStringWidth(str)
         //#if MC>=12102
         //$$ val vanillaX = (-stringWidth).toFloat() / 2f
         //#else

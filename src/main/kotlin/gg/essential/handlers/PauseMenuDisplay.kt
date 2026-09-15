@@ -47,9 +47,6 @@ import gg.essential.gui.EssentialPalette
 import gg.essential.gui.common.MenuButton
 import gg.essential.gui.common.TextFlag
 import gg.essential.gui.common.bindConstraints
-import gg.essential.gui.common.modal.ConfirmDenyModal
-import gg.essential.gui.common.modal.Modal
-import gg.essential.gui.common.modal.configure
 import gg.essential.gui.common.or
 import gg.essential.gui.elementa.VanillaButtonConstraint.Companion.constrainTo
 import gg.essential.gui.elementa.VanillaButtonGroupConstraint.Companion.constrainTo
@@ -58,60 +55,35 @@ import gg.essential.gui.elementa.state.v2.combinators.not
 import gg.essential.gui.elementa.state.v2.stateOf
 import gg.essential.gui.elementa.state.v2.toV2
 import gg.essential.gui.layoutdsl.Alignment
-import gg.essential.gui.layoutdsl.Arrangement
-import gg.essential.gui.layoutdsl.LayoutScope
 import gg.essential.gui.layoutdsl.Modifier
-import gg.essential.gui.layoutdsl.alignBoth
-import gg.essential.gui.layoutdsl.alignVertical
-import gg.essential.gui.layoutdsl.checkboxAlt
 import gg.essential.gui.layoutdsl.color
-import gg.essential.gui.layoutdsl.column
 import gg.essential.gui.layoutdsl.hoverColor
-import gg.essential.gui.layoutdsl.hoverScope
-import gg.essential.gui.layoutdsl.inheritHoverScope
-import gg.essential.gui.layoutdsl.layout
-import gg.essential.gui.layoutdsl.row
 import gg.essential.gui.layoutdsl.shadow
-import gg.essential.gui.layoutdsl.spacer
-import gg.essential.gui.layoutdsl.text
 import gg.essential.gui.menu.AccountManager
 import gg.essential.gui.menu.RightSideBarNew
 import gg.essential.gui.menu.LeftSideBar
-import gg.essential.gui.modal.sps.FirewallBlockingModal
 import gg.essential.gui.modals.EssentialAutoInstalledModal
 import gg.essential.gui.modals.FeaturesEnabledModal
 import gg.essential.gui.modals.UpdateNotificationModal
 import gg.essential.gui.modals.connectionManagerErrorModal
-import gg.essential.gui.modals.ensurePrerequisites
 import gg.essential.gui.modals.updateAvailableModal
 import gg.essential.gui.notification.Notifications
 import gg.essential.gui.notification.error
 import gg.essential.gui.notification.toastButton
-import gg.essential.gui.notification.warning
 import gg.essential.gui.overlay.Layer
 import gg.essential.gui.overlay.LayerPriority
-import gg.essential.gui.overlay.ModalManager
 import gg.essential.gui.proxies.ScreenWithProxiesHandler
 import gg.essential.gui.proxies.ScreenWithVanillaProxyElementsExt
-import gg.essential.gui.sps.InviteFriendsModal
-import gg.essential.gui.sps.WorldSelectionModal
 import gg.essential.gui.util.addTag
 import gg.essential.universal.UMinecraft
 import gg.essential.util.AutoUpdate
 import gg.essential.util.GuiUtil
 import gg.essential.util.findButtonByLabel
 import gg.essential.gui.util.pollingState
-import gg.essential.network.connectionmanager.features.Feature
 import gg.essential.network.connectionmanager.serverdiscovery.NewServerDiscoveryManager
 import gg.essential.network.connectionmanager.ConnectionManagerStatus
-import gg.essential.network.connectionmanager.sps.SPSSessionSource
 import gg.essential.network.connectionmanager.suspension.suspensionModal
-import gg.essential.sps.SpsAddress
-import gg.essential.universal.UScreen
-import gg.essential.universal.USound
-import gg.essential.util.FirewallUtil
 import gg.essential.util.Client
-import gg.essential.util.MinecraftUtils
 import gg.essential.util.isMainMenu
 import gg.essential.vigilance.utils.onLeftClick
 import kotlinx.coroutines.CoroutineScope
@@ -122,7 +94,6 @@ import me.kbrewster.eventbus.Subscribe
 import net.minecraft.client.gui.GuiIngameMenu
 import net.minecraft.client.gui.GuiMultiplayer
 import net.minecraft.client.gui.GuiScreen
-import net.minecraft.world.storage.WorldSummary
 import java.awt.Color
 import java.time.Instant
 import java.util.*
@@ -455,181 +426,6 @@ class PauseMenuDisplay {
             return (screen.isMainMenu || screen is GuiIngameMenu)
         }
 
-        // Opens the appropriate SPS/invite modal based on the user's current connection
-        @JvmStatic
-        @JvmOverloads
-        fun showInviteOrHostModal(
-            source: SPSSessionSource,
-            prepopulatedInvites: Set<UUID> = emptySet(),
-            callback: () -> Unit = {},
-        ) {
-            GuiUtil.launchModalFlow {
-                ensurePrerequisites(features = listOf(Feature.WORLD_HOSTING, Feature.SOCIAL), rules = false)
-
-                awaitModal {
-                    object : Modal(modalManager) {
-                        override fun onOpen() {
-                            super.onOpen()
-                            showInviteOrHostModalInternalOld(source, prepopulatedInvites, null, this, true, callback)
-                        }
-
-                        override val modalName: String? get() = null
-                        override fun LayoutScope.layoutModal() {}
-                        override fun handleEscapeKeyPress() {}
-                    }
-                }
-            }
-        }
-
-        fun showInviteOrHostModalInternalOld(
-            source: SPSSessionSource,
-            prepopulatedInvites: Set<UUID> = emptySet(),
-            worldSummary: WorldSummary? = null,
-            previousModal: Modal,
-            showIPWarning: Boolean = true,
-            callback: () -> Unit = {},
-        ) {
-            val connectionManager = Essential.getInstance().connectionManager
-
-            val currentServerData = UMinecraft.getMinecraft().currentServerData
-            val spsManager = connectionManager.spsManager
-
-            // Attempts to replace the previously opened modal, or, push a new modal if one is not open.
-            fun pushModal(builder: (ModalManager) -> Modal) {
-                previousModal.replaceWith(builder(previousModal.modalManager))
-            }
-
-            // Attempts to show the user various warnings (TOS, Connection Manager, Firewall, etc.) before pushing
-            // the provided modal.
-            fun pushModalAndWarnings(
-                showNetworkRelatedWarnings: Boolean,
-                builder: (ModalManager) -> Modal
-            ) {
-                fun Modal.retryModal(showIPWarningOverride: Boolean = showIPWarning) {
-                    showInviteOrHostModalInternalOld(
-                        source,
-                        prepopulatedInvites,
-                        worldSummary,
-                        this,
-                        showIPWarningOverride,
-                        callback,
-                    )
-                }
-
-                if (showNetworkRelatedWarnings) {
-                    if (FirewallUtil.isFirewallBlocking()) {
-                        pushModal { manager ->
-                            FirewallBlockingModal(manager, null, tryAgainAction = { retryModal() })
-                        }
-
-                        return
-                    }
-
-                    if (showIPWarning && EssentialConfig.spsIPWarning) {
-                        pushModal { manager ->
-                            createIPAddressWarningModal(manager, callback = { retryModal(false) })
-                        }
-
-                        return
-                    }
-                }
-
-                // All warnings/checks have been performed, we can show the original modal.
-                pushModal(builder)
-            }
-
-            if (UScreen.currentScreen.isMainMenu && worldSummary == null) {
-                // The world selection modal does not get any network warnings, those will be shown
-                // in the later stage of the modal (see where `worldSummary != null`).
-                pushModalAndWarnings(showNetworkRelatedWarnings = false) { WorldSelectionModal(it) }
-                return
-            }
-
-
-            if (worldSummary != null) {
-                pushModalAndWarnings(showNetworkRelatedWarnings = true) { manager ->
-                    InviteFriendsModal.createWorldSettingsModal(
-                        manager,
-                        prepopulatedInvites,
-                        justStarted = true,
-                        worldSummary,
-                        source = source,
-                    )
-                }
-            } else if (UMinecraft.getMinecraft().integratedServer != null) {
-                if (MinecraftUtils.isHostingSPS()) {
-                    pushModalAndWarnings(showNetworkRelatedWarnings = false) { manager ->
-                        InviteFriendsModal.createSelectFriendsModal(
-                            manager,
-                            spsManager.invitedUsers + prepopulatedInvites,
-                            justStarted = false,
-                            onComplete = callback,
-                        )
-                    }
-                } else {
-                    pushModalAndWarnings(showNetworkRelatedWarnings = true) { manager ->
-                        spsManager.startLocalSession(source)
-
-                        InviteFriendsModal.createWorldSettingsModal(
-                            manager,
-                            prepopulatedInvites,
-                            justStarted = true,
-                            source = source,
-                            callbackAfterOpen = callback,
-                        )
-                    }
-                }
-            } else if (currentServerData != null) {
-                val serverAddress = currentServerData.serverIP
-                val isSPSServer = SpsAddress.parse(serverAddress) != null
-                if (isSPSServer) {
-                    Notifications.warning("Only hosts can send invites", "")
-                    return
-                }
-
-                pushModalAndWarnings(showNetworkRelatedWarnings = false) { manager ->
-                    InviteFriendsModal.showInviteModal(
-                        manager,
-                        source = source,
-                        onComplete = callback
-                    )
-                }
-            } else {
-                // Realms, ReplayMod, etc.
-                Notifications.error("Can't invite to this world", "")
-                previousModal.close()
-            }
-        }
-
-        fun createIPAddressWarningModal(modalManager: ModalManager, callback: Modal.() -> Unit): Modal {
-            return ConfirmDenyModal(
-                modalManager,
-                false
-            ).configure {
-                titleText =
-                    "This world will be hosted through your internet. " +
-                        "Your host's IP will be visible through network logs! \n\nDo you want to proceed?"
-                primaryButtonText = "Proceed"
-                spacer.setHeight(12.pixels)
-
-                onPrimaryAction { callback(this) }
-            }.configureLayout { customContent ->
-                customContent.layout {
-                    val checkBoxState = !EssentialConfig.spsIPWarningState
-                    column(Modifier.alignBoth(Alignment.Center)) {
-                        row(Modifier.hoverScope(), Arrangement.spacedBy(5f)) {
-                            checkboxAlt(checkBoxState, Modifier.shadow(EssentialPalette.BLACK).inheritHoverScope())
-                            text("Don't show this warning again", modifier = Modifier.alignVertical(Alignment.Center(true)).color(EssentialPalette.TEXT_DISABLED).shadow(EssentialPalette.BLACK))
-                        }.onLeftClick {
-                            it.stopPropagation()
-                            USound.playButtonPress()
-                            checkBoxState.set { !it }
-                        }
-                        spacer(height = 14f)
-                    }
-                }
-            }
-        }
     }
 
     enum class MenuType { MAIN, SINGLEPLAYER, SERVER }

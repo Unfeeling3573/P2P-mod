@@ -12,6 +12,8 @@
 package gg.essential.gui.elementa.essentialmarkdown.drawables
 
 import gg.essential.elementa.components.UIBlock
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.fillMcScaleXYWH
 import gg.essential.gui.elementa.essentialmarkdown.DrawState
 import gg.essential.gui.elementa.essentialmarkdown.EssentialMarkdown
 import gg.essential.universal.UMatrixStack
@@ -65,6 +67,7 @@ class BlockquoteDrawable(md: EssentialMarkdown, val drawables: DrawableList) : D
         )
     }
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
     override fun draw(matrixStack: UMatrixStack, state: DrawState) {
         UIBlock.drawBlockSized(
             matrixStack,
@@ -76,6 +79,18 @@ class BlockquoteDrawable(md: EssentialMarkdown, val drawables: DrawableList) : D
         )
 
         drawables.forEach { it.drawCompat(matrixStack, state) }
+    }
+
+    override fun extract(extractor: ElementaExtractor, state: DrawState) {
+        extractor.fillMcScaleXYWH(
+            x + state.xShift + config.blockquoteConfig.spaceBeforeDivider,
+            y + state.yShift + config.blockquoteConfig.spaceBeforeBlockquote,
+            config.blockquoteConfig.dividerWidth,
+            dividerHeight,
+            config.blockquoteConfig.dividerColor,
+        )
+
+        drawables.forEach { it.extract(extractor, state) }
     }
 
     override fun cursorAt(mouseX: Float, mouseY: Float, dragged: Boolean, mouseButton: Int) = drawables.cursorAt(mouseX, mouseY, dragged, mouseButton)

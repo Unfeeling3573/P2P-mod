@@ -11,53 +11,27 @@
  */
 package gg.essential.handlers.screenshot
 
+import gg.essential.util.httpClient
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
-import java.io.OutputStream
-import java.io.PrintWriter
-import java.net.HttpURLConnection
 import java.net.MalformedURLException
-import java.net.URL
 
 object ScreenshotUploadUtil {
-
-    private const val CRLF = "\r\n"
-
     @Throws(MalformedURLException::class, IOException::class)
     fun httpUpload(url: String, fileData: ByteArray): Boolean {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        val boundary = "---------------" + System.currentTimeMillis().toString(16)
-        connection.doOutput = true
-        connection.doInput = true
-        connection.useCaches = true
-        connection.requestMethod = "POST"
-        connection.addRequestProperty("User-Agent", "Essential")
-        connection.setRequestProperty("Connection", "Keep-Alive")
-        connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-        val directOutput = connection.outputStream
-        val body = PrintWriter(directOutput.writer(), true)
-        body.append(CRLF)
-        addFileData(fileData, body, directOutput, boundary)
-        addCloseDelimiter(body, boundary)
-        return (connection.responseCode / 100) == 2
-    }
-
-
-    @Throws(IOException::class)
-    private fun addFileData(byteStream: ByteArray, body: PrintWriter, directOutput: OutputStream, boundary: String) {
-        body.append("--").append(boundary).append(CRLF)
-        body.append("""Content-Disposition: form-data; name="file"; filename="file"""").append(CRLF)
-        body.append("Content-Type: image/png").append(CRLF)
-        body.append("Content-Transfer-Encoding: binary").append(CRLF)
-        body.append(CRLF)
-        body.flush()
-        directOutput.write(byteStream)
-        directOutput.flush()
-        body.append(CRLF)
-        body.flush()
-    }
-
-    private fun addCloseDelimiter(body: PrintWriter, boundary: String) {
-        body.append("--").append(boundary).append("--").append(CRLF)
-        body.flush()
+        val httpClient = httpClient.join()
+        val request = Request.Builder().apply {
+            url(url)
+            post(MultipartBody.Builder().apply {
+                setType(MultipartBody.FORM)
+                addFormDataPart("file", "file", fileData.toRequestBody("image/png".toMediaType()))
+            }.build())
+        }
+        httpClient.newCall(request.build()).execute().use { response ->
+            return response.isSuccessful
+        }
     }
 }

@@ -45,7 +45,7 @@ class WardrobeContainer(
         val bannerManager = wardrobeState.bannerManager
         val fadeEffect = Modifier.effect { FadeEffect(EssentialPalette.GUI_BACKGROUND, 0.5f) }
         val categoryBanner =
-            bannerManager.getNoticeBanners()
+            bannerManager.noticeBanners
                 .zip(wardrobeState.saleState).zip(currentSuperCategory) { (banners, sale), category ->
                     banners.firstOrNull { banner ->
                         (banner.categories.let { it == null || it.contains(category) }) &&

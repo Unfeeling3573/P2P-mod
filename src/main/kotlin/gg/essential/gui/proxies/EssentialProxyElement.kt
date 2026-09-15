@@ -32,6 +32,10 @@ import gg.essential.util.findChildOfTypeOrNull
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiButton
 
+//#if MC >= 26.3
+//$$ import gg.essential.universal.UMouse.buttonGlfwToSdl
+//#endif
+
 //#if MC>=12109
 //$$ import net.minecraft.client.gui.Click
 //$$ import net.minecraft.client.input.MouseInput
@@ -342,7 +346,9 @@ abstract class EssentialProxyElement<T : UIComponent>(
             // fancy menu v3+ cancels button rendering via a mixin and custom flag
             // this flag also modifies the button to be invalid for clicks when deleted, which
             // means we can read isValidClickButton() to avoid having to depend on fancy menu directly
-            //#if MC>=12109
+            //#if MC >= 26.3
+            //$$ || !isValidClickButton(MouseButtonInfo(buttonGlfwToSdl(0), 0))
+            //#elseif MC>=12109
             //$$ || !isValidClickButton(MouseInput(0, 0))
             //#elseif MC>=11800
             //$$ || !isValidClickButton(0)
@@ -355,10 +361,11 @@ abstract class EssentialProxyElement<T : UIComponent>(
     protected val hasProxyContentBeenModified: Boolean
         get() = vanillaTextAccess != expectedText || hasProxyBeenHidden || !enabled
 
+    // In modern versions, explicitly use getter/setter to prevent bypassing other mod mixins (e.g. FancyMenu)
     protected var vanillaTextAccess: String
         //#if MC>=11600
-        //$$ get() = this.message.string
-        //$$ set(value) { this.message = textLiteral(value) }
+        //$$ get() = this.getMessage().string
+        //$$ set(value) { this.setMessage(textLiteral(value)) }
         //#else
         get() = this.displayString
         set(value) { this.displayString = value }

@@ -191,7 +191,10 @@ object EssentialUserArgumentParser : ArgumentParser<EssentialUser> {
     private val connectionManager = Essential.getInstance().connectionManager
 
     private fun getSpsInvites(): Set<UUID> {
-        return connectionManager.spsManager.invitedUsers
+        return Essential.getInstance().worldsManager
+            .integratedServerWorld.getUntracked()
+            ?.members?.getUntracked()
+            ?: emptySet()
     }
 
     val users: Map<UUID, State<String?>>

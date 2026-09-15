@@ -55,7 +55,6 @@ import gg.essential.mixins.transformers.entity.player.EntityPlayerAccessor
 import gg.essential.model.ParticleSystem
 import gg.essential.model.collision.PlaneCollisionProvider
 import gg.essential.model.light.LightProvider
-import gg.essential.universal.UMatrixStack
 import gg.essential.util.ModLoaderUtil
 import gg.essential.util.executor
 import io.netty.channel.embedded.EmbeddedChannel
@@ -263,9 +262,10 @@ class EmulatedUI3DPlayer(
         //#endif
     }
 
-    override fun draw(matrixStack: UMatrixStack) {
+    override fun drawPlayer() {
         if (errored) {
-            return super.draw(matrixStack)
+            super.drawPlayer()
+            return
         }
         RenderPlayerBypass.bypass = true;
         withFakeClientFields {
@@ -281,7 +281,7 @@ class EmulatedUI3DPlayer(
             //$$ @Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS") // `entity` parameter inappropriately marked as non-null by Forge
             //$$ mcClient.renderManager.cacheActiveRenderInfo(FakeWorld.fakeWorld, mcClient.gameRenderer.activeRenderInfo, null)
             //#endif
-            super.draw(matrixStack)
+            super.drawPlayer()
         }
         RenderPlayerBypass.bypass = false;
     }

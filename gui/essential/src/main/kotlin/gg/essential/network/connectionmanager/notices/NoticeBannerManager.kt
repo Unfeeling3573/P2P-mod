@@ -16,14 +16,13 @@ import gg.essential.gui.EssentialPalette
 import gg.essential.gui.elementa.state.v2.*
 import gg.essential.gui.wardrobe.WardrobeCategory
 import gg.essential.notices.NoticeType
-import gg.essential.notices.model.Notice
 import java.awt.Color
 
-class NoticeBannerManager(private val noticesManager: NoticesManager) : NoticeListener {
-    private val noticeBanners: MutableListState<NoticeBanner> = mutableListStateOf()
+class NoticeBannerManager(private val noticesManager: NoticesManager) {
+    private val notices = noticesManager.activeNotices.filter { it.type == NoticeType.WARDROBE_BANNER }
 
-    override fun noticeAdded(notice: Notice) {
-        if (notice.type == NoticeType.WARDROBE_BANNER) {
+    val noticeBanners =
+        notices.mapEach { notice ->
             var categories: MutableList<WardrobeCategory>? = null
             if (notice.metadata["categories"] != null) {
                 categories = mutableListOf()
@@ -31,36 +30,20 @@ class NoticeBannerManager(private val noticesManager: NoticesManager) : NoticeLi
                     WardrobeCategory.get(category.lowercase())?.let { categories.add(it) }
                 }
             }
-            noticeBanners.add(
-                NoticeBanner(
-                    notice.id,
-                    notice.metadata["lines"] as List<String>,
-                    WardrobeBannerColor.valueOf((notice.metadata["color"] as String).uppercase()),
-                    notice.metadata["sticky"] as Boolean,
-                    notice.isDismissible,
-                    categories,
-                    notice.metadata["associated_sale_name"] as? String,
-                )
+            NoticeBanner(
+                notice.id,
+                notice.metadata["lines"] as List<String>,
+                WardrobeBannerColor.valueOf((notice.metadata["color"] as String).uppercase()),
+                notice.metadata["sticky"] as Boolean,
+                notice.isDismissible,
+                categories,
+                notice.metadata["associated_sale_name"] as? String,
             )
         }
-    }
-
-    override fun noticeRemoved(notice: Notice) {
-        noticeBanners.get().filter { it.id == notice.id }.forEach {
-            noticeBanners.remove(it)
-        }
-    }
-
-    override fun onConnect() {
-        noticeBanners.clear()
-    }
 
     fun dismiss(banner: NoticeBanner) {
         noticesManager.dismissNotice(banner.id)
-        noticeBanners.remove(banner)
     }
-
-    fun getNoticeBanners() = noticeBanners
 }
 
 data class NoticeBanner(

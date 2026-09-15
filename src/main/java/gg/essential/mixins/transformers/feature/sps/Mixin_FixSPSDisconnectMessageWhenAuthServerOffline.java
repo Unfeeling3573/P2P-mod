@@ -14,8 +14,9 @@ package gg.essential.mixins.transformers.feature.sps;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import gg.essential.Essential;
+import gg.essential.mixins.ext.server.integrated.IntegratedServerExt;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.integrated.IntegratedServer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
@@ -24,6 +25,6 @@ public class Mixin_FixSPSDisconnectMessageWhenAuthServerOffline {
 
     @WrapOperation(method = "run", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;isSinglePlayer()Z"))
     private boolean modifyServerState(MinecraftServer instance, Operation<Boolean> original) {
-        return original.call(instance) && Essential.getInstance().getConnectionManager().getSpsManager().getLocalSession() == null;
+        return original.call(instance) && instance instanceof IntegratedServer &&((IntegratedServerExt) instance).getEssential$manager().getAppliedOpenToLan();
     }
 }

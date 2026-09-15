@@ -21,7 +21,17 @@ import org.spongepowered.asm.mixin.injection.Redirect
 @Pseudo
 @Mixin(targets = ["games.thecodewarrior.bitfont.data.BitGrid"])
 class BitGridMixin {
-    @Redirect(method = ["*"], at = At("INVOKE", target = "owner=/^kotlin\\/UByteArray$/ name=/^get-impl\$/"))
+    @Redirect(
+        method = ["*"],
+        at =
+            //#if FABRIC && MC >= 26.3
+            //$$ [
+            //#endif
+            At("INVOKE", target = "owner=/^kotlin\\/UByteArray$/ name=/^get-impl\$/")
+            //#if FABRIC && MC >= 26.3
+            //$$ ]
+            //#endif
+    )
     private fun fixUByteArrayGetImpl(bytes: UByteArray, index: Int): UByte {
         return bytes[index]
     }

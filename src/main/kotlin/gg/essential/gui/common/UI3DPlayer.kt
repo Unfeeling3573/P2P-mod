@@ -31,7 +31,10 @@ import gg.essential.cosmetics.events.AnimationEventType
 import gg.essential.cosmetics.events.CosmeticEventDispatcher.dispatchEvents
 import gg.essential.cosmetics.renderCosmeticsForOutlines
 import gg.essential.cosmetics.skinmask.MaskedSkinProvider
+import gg.essential.elementa.components.Window
 import gg.essential.elementa.dsl.pixels
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.SpecialRenderer
 import gg.essential.elementa.state.BasicState
 import gg.essential.elementa.state.State
 import gg.essential.gui.elementa.state.v2.mutableStateOf
@@ -48,7 +51,6 @@ import gg.essential.mod.cosmetics.CosmeticSlot
 import gg.essential.mod.cosmetics.CosmeticsSubject
 import gg.essential.mod.cosmetics.PlayerModel
 import gg.essential.mod.cosmetics.preview.PerspectiveCamera
-import gg.essential.mod.cosmetics.settings.variant
 import gg.essential.model.EnumPart
 import gg.essential.model.ModelAnimationState
 import gg.essential.model.ModelInstance
@@ -73,12 +75,15 @@ import gg.essential.model.util.UMatrixStack as CMatrixStack
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
 import gg.essential.universal.UResolution
+import gg.essential.universal.render.UGpuFormat
+import gg.essential.universal.render.UGpuTexture
+import gg.essential.universal.render.UGpuTextureView
 import gg.essential.util.Client
 import gg.essential.util.GuiEssentialPlatform.Companion.platform
 import gg.essential.util.ModLoaderUtil
-import gg.essential.util.getPerspective;
 import gg.essential.util.identifier
 import gg.essential.util.orNull
+import gg.essential.util.withDefaultMcGuiRenderingSetup
 import gg.essential.util.toUC
 import gg.essential.vigilance.utils.onLeftClick
 import kotlinx.coroutines.CoroutineScope
@@ -101,8 +106,14 @@ import net.minecraft.util.ResourceLocation
 import org.lwjgl.opengl.GL11
 import kotlin.math.min
 import kotlin.math.PI
+import kotlin.math.roundToInt
 import kotlin.random.Random
 import java.util.*
+
+//#if MC >= 26.3
+//#else
+import gg.essential.util.DrawFramebufferContext
+//#endif
 
 //#if MC >= 26.2
 //$$ import net.minecraft.client.renderer.SubmitNodeStorage
@@ -116,6 +127,8 @@ import java.util.*
 //$$ import com.mojang.blaze3d.buffers.GpuBuffer
 //$$ import com.mojang.blaze3d.buffers.Std140Builder
 //$$ import org.lwjgl.system.MemoryStack
+//#else
+import gg.essential.util.ScissorState
 //#endif
 
 //#if MC>=12102
@@ -295,33 +308,81 @@ open class UI3DPlayer(
         fallbackPlayer.orNull?.close()
     }
 
+    init {
+        // FIXME We currently put up a loading spinner and hide this component via a scissor effect while cosmetics are
+        //  loading (see [CosmeticPreview]). That however means [extract] won't be called.
+        //  And we currently update the cosmetics only in the middle of our `draw`, which then won't happen, so the
+        //  spinner will never finish.
+        //  Ideally we should be separating this update code from the actual rendering; but with particle positions
+        //  potentially depending on the rendered entity pose, this is non-trivial.
+        //  Hence this workaround for now.
+        addUpdateFunc { _, _ -> if (errored) fallbackPlayer.value.checkForUpdates() }
+    }
+
+    override fun extractComponent(extractor: ElementaExtractor) {
+        val window = Window.of(this)
+        // While the player itself is always within the bounds of this component, cosmetics and particles are not,
+        // so we'll size the component to be the entire screen, and let the scissor reduce it where possible.
+        extractor.special(
+            0,
+            0,
+            (window.getWidth() * extractor.guiScale).roundToInt(),
+            (window.getHeight() * extractor.guiScale).roundToInt(),
+            factory = UI3DPlayerSpecialRendererFactory,
+            args = extractRenderState(),
+        )
+    }
+
+    override fun extractRenderState(): UI3DPlayerRenderState {
+        return UI3DPlayerRenderState(this)
+    }
+
+    //#if MC < 26.3
     private val mc12106ScissorHandler = Mc12106ScissorHandler()
 
+    // Note: This has to be kept around because this component is exposed via our API.
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
     override fun draw(matrixStack: UMatrixStack) {
+        @Suppress("DEPRECATION")
         beforeDraw(matrixStack)
 
         mc12106ScissorHandler.beforeDraw(matrixStack)
 
         val camera = perspectiveCamera
         if (camera != null) {
-            drawWithPerspectiveProjection(matrixStack.fork(), camera)
+            clearDepthTexture()
+
+            drawWithPerspectiveProjection(matrixStack.fork(), camera, mc12106ScissorHandler.viewportWidth, mc12106ScissorHandler.viewportHeight)
+
+            //#if MC >= 1.20 && FORGE
+            //$$ // EM-2272: Forge messes with MC's orthographic projection, causing some depth values to be out of the expected range.
+            //$$ // https://github.com/MinecraftForge/MinecraftForge/blob/1.20.x/patches/minecraft/net/minecraft/client/renderer/GameRenderer.java.patch#L36-L43
+            //$$ GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT)
+            //#endif
         } else {
-            drawWithOrthographicProjection(matrixStack.fork())
+            val stack = matrixStack.fork()
+
+            if (platform.usesReversedZ) {
+                clearDepthTexture()
+                if (!platform.irisReversesZ) {
+                    stack.scale(1f, 1f, -1f)
+                }
+            }
+
+            drawWithOrthographicProjection(stack)
         }
 
         mc12106ScissorHandler.afterDraw(matrixStack)
 
+        @Suppress("DEPRECATION")
         super.draw(matrixStack)
     }
+    //#endif
 
-    private fun drawWithOrthographicProjection(stack: UMatrixStack) {
-        if (platform.usesReversedZ) {
-            clearDepthTexture()
-            if (!platform.irisReversesZ) {
-                stack.scale(1f, 1f, -1f)
-            }
-        }
-
+    internal fun drawWithOrthographicProjection(stack: UMatrixStack) {
         // Center player within component
         stack.translate(getLeft() + getWidth() / 2, getTop() + getHeight() / 2, 450f)
 
@@ -355,6 +416,7 @@ open class UI3DPlayer(
         //#endif
     }
 
+    //#if MC < 26.3
     private fun clearDepthTexture() {
         // Perspective depth values are incredibly close to 1 (while orthographic are about [0.2; 0.5]),
         // so they will naturally always end up behind anything which was already rendered there and therefore won't be
@@ -384,10 +446,9 @@ open class UI3DPlayer(
         GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT)
         //#endif
     }
+    //#endif
 
-    private fun drawWithPerspectiveProjection(stack: UMatrixStack, camera: PerspectiveCamera) {
-        clearDepthTexture()
-
+    internal fun drawWithPerspectiveProjection(stack: UMatrixStack, camera: PerspectiveCamera, viewportWidth: Int, viewportHeight: Int) {
         val (left, top) = stack.transform(getLeft(), getTop())
         val (right, bottom) = stack.transform(getRight(), getBottom())
         val middleX = (left + right) / 2
@@ -395,8 +456,8 @@ open class UI3DPlayer(
         val width = right - left
         val height = bottom - top
 
-        val windowWidth = mc12106ScissorHandler.viewportWidth / UResolution.scaleFactor.toFloat()
-        val windowHeight = mc12106ScissorHandler.viewportHeight / UResolution.scaleFactor.toFloat()
+        val windowWidth = viewportWidth / UResolution.scaleFactor.toFloat()
+        val windowHeight = viewportHeight / UResolution.scaleFactor.toFloat()
         val scaleX = width / windowWidth
         val scaleY = height / windowHeight
 
@@ -476,12 +537,6 @@ open class UI3DPlayer(
         GlStateManager.popMatrix()
         GlStateManager.matrixMode(GL11.GL_MODELVIEW)
         //#endif
-
-        //#if MC>=12000 && FORGE
-        //$$ // EM-2272: Forge messes with MC's orthographic projection, causing some depth values to be out of the expected range.
-        //$$ // https://github.com/MinecraftForge/MinecraftForge/blob/1.20.x/patches/minecraft/net/minecraft/client/renderer/GameRenderer.java.patch#L36-L43
-        //$$ GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT)
-        //#endif
     }
 
     private fun UMatrixStack.transform(x: Float, y: Float): Pair<Float, Float> {
@@ -496,7 +551,7 @@ open class UI3DPlayer(
         return Pair(vec.x, vec.y)
     }
 
-    private fun drawPlayer() {
+    protected open fun drawPlayer() {
         bindWhiteLightMapTexture()
 
         if (errored) {
@@ -662,7 +717,21 @@ open class UI3DPlayer(
             //#endif
             //$$ }
             //$$ renderManager.render(state, cameraState, 0.0, 0.0, 0.0, stack.toMC(), submitNodeStorage)
-            //#if MC >= 26.2
+            //#if MC >= 26.3
+            //$$ entityRenderPass.prepareFrame(submitNodeStorage).use { frame ->
+            //$$     RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+            //$$         { "Cosmetics" },
+            //$$         MinecraftRenderBackend.outputColorTexture!!,
+            //$$         java.util.Optional.empty(),
+            //$$         MinecraftRenderBackend.outputDepthTexture,
+            //$$         java.util.OptionalDouble.empty(),
+            //$$     ).use { renderPass ->
+            //$$         RenderSystem.bindDefaultUniforms(renderPass);
+            //$$         net.minecraft.client.renderer.feature.FeatureRenderDispatcher
+            //$$             .renderAllFeatures(renderPass, frame);
+            //$$     }
+            //$$ }
+            //#elseif MC >= 26.2
             //$$ entityRenderPass.renderAllFeatures(submitNodeStorage)
             //#else
             //$$ entityRenderPass.render()
@@ -826,7 +895,7 @@ open class UI3DPlayer(
 
         fallbackPlayer.value.render(stack, playerQueue, cosmeticQueuesProvider)
 
-        CosmeticHoverOutlineEffect.active?.renderCosmeticsForOutlines(cosmeticQueues)
+        CosmeticHoverOutlineHook.active?.renderCosmeticsForOutlines(cosmeticQueues)
 
         val combinedQueue = playerQueue
         cosmeticQueues.values.forEach { it.copyTo(combinedQueue) }
@@ -987,7 +1056,7 @@ open class UI3DPlayer(
             //#endif
         }
 
-        private fun checkForUpdates() {
+        fun checkForUpdates() {
             // Check if the profile configured for this UI3DPlayer has changed
             val profileConfigured = player?.gameProfile?.wrapped() ?: profile.get() ?: EmulatedUI3DPlayer.getLocalGameProfile()
             if (currentProfileConfigured != profileConfigured) {
@@ -1215,5 +1284,129 @@ open class UI3DPlayer(
         var current: UI3DPlayer? = null
         @JvmField
         var isRenderingPerspective = false
+    }
+}
+
+// FIXME needs to be made safe to use from render thread once that becomes a thing
+class UI3DPlayerRenderState(
+    val ui3DPlayer: UI3DPlayer
+) : UIPlayer.RenderState
+
+private object UI3DPlayerSpecialRendererFactory : SpecialRenderer.Factory<UI3DPlayerRenderState> {
+    override fun create(): SpecialRenderer<UI3DPlayerRenderState> =
+        UI3DPlayerSpecialRendererInstance()
+}
+
+private class UI3DPlayerSpecialRendererInstance : SpecialRenderer<UI3DPlayerRenderState> {
+    override val supportsScissor: Boolean
+        //#if MC >= 1.21.6
+        //$$ get() = false
+        //#else
+        get() = true
+        //#endif
+    override val onlyDrawsInBounds: Boolean
+        get() = false
+
+    var depthTextureView: UGpuTextureView? = null
+
+    override fun render(
+        destination: UGpuTextureView,
+        instances: List<SpecialRenderer.Instance<UI3DPlayerRenderState>>
+    ) {
+        val device = UGraphics.getDevice()
+
+        if (depthTextureView?.texture?.width != destination.texture.width || depthTextureView?.texture?.height != destination.texture.height) {
+            depthTextureView?.texture?.close()
+            depthTextureView?.close()
+            depthTextureView = null
+        }
+
+        val depthTextureView = depthTextureView ?: run {
+            device.createTextureView(device.createTexture(
+                "UI3DPlayer Depth",
+                UGpuTexture.Usage.RENDER_ATTACHMENT + UGpuTexture.Usage.COPY_DST,
+                UGpuFormat.DEFAULT_DEPTH,
+                destination.texture.width,
+                destination.texture.height,
+                1,
+            ))
+        }.also { depthTextureView = it }
+
+        device.clearDepth(depthTextureView.texture, if (platform.usesReversedZ) 0.0 else 1.0)
+
+        UI3DPlayerSpecialRenderer.render(destination, depthTextureView, instances)
+    }
+
+    override fun close() {
+        depthTextureView?.texture?.close()
+        depthTextureView?.close()
+        depthTextureView = null
+    }
+}
+
+object UI3DPlayerSpecialRenderer {
+    //#if MC < 26.3
+    private val drawFramebufferContext = DrawFramebufferContext()
+    //#endif
+
+    fun render(
+        color: UGpuTextureView,
+        depth: UGpuTextureView,
+        instance: SpecialRenderer.Instance<UIPlayer.RenderState>,
+    ) {
+        render(color, depth, listOf(SpecialRenderer.Instance(
+            instance.dstX, instance.dstY, instance.width, instance.height,
+            instance.scissorX, instance.scissorY, instance.scissorWidth, instance.scissorHeight,
+            instance.args as UI3DPlayerRenderState,
+        )))
+    }
+
+    fun render(
+        destination: UGpuTextureView,
+        destinationDepth: UGpuTextureView,
+        instances: List<SpecialRenderer.Instance<UI3DPlayerRenderState>>,
+    ) {
+        //#if MC >= 26.3
+        //$$ overrideRenderTarget(destination, destinationDepth)
+        //$$ try {
+        //#else
+        drawFramebufferContext.withDrawFramebuffer(destination, destinationDepth) {
+        //#endif
+            val guiScale = UResolution.scaleFactor
+            withDefaultMcGuiRenderingSetup(destination.texture.width, destination.texture.height, guiScale) {
+                for (instance in instances) {
+                    //#if MC < 1.21.6
+                    ScissorState(true, instance.scissorX, destination.texture.height - instance.scissorHeight - instance.scissorY, instance.scissorWidth, instance.scissorHeight).activate()
+                    //#endif
+
+                    val stack = UMatrixStack()
+                    stack.translate(instance.dstX.toFloat() / guiScale.toFloat(), instance.dstY.toFloat() / guiScale.toFloat(), 0f)
+
+                    val player = instance.args.ui3DPlayer
+                    val camera = player.perspectiveCamera
+                    if (camera != null) {
+                        player.drawWithPerspectiveProjection(stack, camera, destination.texture.width, destination.texture.height)
+                    } else {
+                        player.drawWithOrthographicProjection(stack)
+                    }
+                }
+            }
+        //#if MC >= 26.3
+        //$$ } finally {
+        //$$     MinecraftRenderBackend.outputColorTexture = null
+        //$$     MinecraftRenderBackend.outputDepthTexture = null
+        //$$ }
+        //#else
+        }
+        //#endif
+    }
+
+    fun overrideRenderTarget(colorView: UGpuTextureView, depthView: UGpuTextureView) {
+        //#if MC >= 26.3
+        //$$ MinecraftRenderBackend.outputColorTexture = UGraphics.getPlatformAdapter().textureView(colorView)
+        //$$ MinecraftRenderBackend.outputDepthTexture = UGraphics.getPlatformAdapter().textureView(depthView)
+        //#else
+        drawFramebufferContext.overrideRenderTarget(colorView, depthView)
+        //#endif
     }
 }

@@ -12,15 +12,9 @@
 package gg.essential.gui.screenshot.editor.change
 
 import gg.essential.gui.screenshot.editor.ScreenshotCanvas
-import gg.essential.universal.UMatrixStack
 
 /**
  * Vector stroke
  */
 abstract class VectorStroke(val editableScreenshot: ScreenshotCanvas, val color: Int) : Change {
-
-    /**
-     * Renders this VectorStroke
-     */
-    abstract fun render(matrixStack: UMatrixStack, imageX: Float, imageY: Float, imageWidth: Float, imageHeight: Float, scale: Float)
 }

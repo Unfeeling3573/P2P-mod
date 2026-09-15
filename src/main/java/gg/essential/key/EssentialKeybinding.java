@@ -136,7 +136,18 @@ public class EssentialKeybinding implements GuiEssentialPlatform.Keybind {
     private void tickMainMenu() {
         if (getRequiresEssentialFull() && !EssentialConfig.INSTANCE.getEssentialFull()) return;
         int keyCode = getKeyCode();
+
+        //#if MC >= 26.3
+        //$$ boolean keyDown;
+        //$$ if (keyCode == InputConstants.UNKNOWN.getValue()) {
+        //$$     keyDown = false;
+        //$$ } else {
+        //$$     var keyboardState = org.lwjgl.sdl.SDLKeyboard.SDL_GetKeyboardState();
+        //$$     keyDown = keyboardState != null && keyCode < keyboardState.remaining() && keyboardState.get(keyCode) != 0;
+        //$$ }
+        //#else
         boolean keyDown = keyCode != UKeyboard.KEY_NONE && UKeyboard.isKeyDown(keyCode);
+        //#endif
 
         if (!pressed && keyDown) {
             pressed = true;
@@ -267,6 +278,17 @@ public class EssentialKeybinding implements GuiEssentialPlatform.Keybind {
         return isBound() && getKeyCode() == keyCode;
     }
 
+    // Like isKeyCode but automatically converts the keyCode into a scancode for 26.3+.
+    // May fail and return incorrect results in cases where there isn't a 1:1 correspondance.
+    // For use where we don't yet have access to the proper scancode. Should be avoided where possible.
+    @Deprecated
+    public boolean isKeyCodeLegacy(int keyCode) {
+        //#if MC >= 26.3
+        //$$ keyCode = org.lwjgl.sdl.SDLKeyboard.SDL_GetScancodeFromKey(keyCode, null);
+        //#endif
+        return isKeyCode(keyCode);
+    }
+
     /**
      * Unregisters the keybinding by removing it from the MC keybinding list
      */
@@ -332,7 +354,7 @@ public class EssentialKeybinding implements GuiEssentialPlatform.Keybind {
         // before any other GuiKeyTypedEvent listener, not just that specific one.
         @Subscribe(priority = 100)
         public void keybindBlocker(GuiKeyTypedEvent event) {
-            if (event.getKeyCode() == getKeyCode() || event.getTypedChar() != '\0') {
+            if (event.getKeyBindingKeyCode() == getKeyCode() || event.getTypedChar() != '\0') {
                 event.setCancelled(true);
             }
         }
@@ -342,7 +364,15 @@ public class EssentialKeybinding implements GuiEssentialPlatform.Keybind {
             // We need to use a tick event (as opposed to onRelease) and UKeyboard (as opposed to KeyBinding.isKeyDown)
             // because all KeyBindings are internally marked as released when changing screens, but we want to suppress
             // key events until the actual key is released.
-            if (!UKeyboard.isKeyDown(getKeyCode())) {
+
+            int keyCode = getKeyCode();
+            //#if MC >= 26.3
+            //$$ var keyboardState = org.lwjgl.sdl.SDLKeyboard.SDL_GetKeyboardState();
+            //$$ boolean keyDown = keyboardState != null && keyCode < keyboardState.remaining() && keyboardState.get(keyCode) != 0;
+            //#else
+            boolean keyDown = UKeyboard.isKeyDown(keyCode);
+            //#endif
+            if (!keyDown) {
                 Essential.EVENT_BUS.unregister(this);
                 registered = false;
             }

@@ -13,12 +13,18 @@ package gg.essential.gui.effects
 
 import gg.essential.elementa.components.UIBlock
 import gg.essential.elementa.effects.Effect
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.PostProcessingRenderer
 import gg.essential.gui.elementa.state.v2.State
 import gg.essential.gui.elementa.state.v2.toV2
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
 import gg.essential.universal.UResolution
+import gg.essential.universal.render.SharedIndexBuffers
+import gg.essential.universal.render.UGpuBuffer
 import gg.essential.universal.render.UGpuSampler
+import gg.essential.universal.render.UGpuTextureView
+import gg.essential.universal.render.URenderPassDescriptor
 import gg.essential.universal.render.URenderPipeline
 import gg.essential.universal.shader.BlendState
 import gg.essential.universal.vertex.UBufferBuilder
@@ -39,9 +45,76 @@ import java.util.concurrent.ConcurrentHashMap
 class AlphaEffect(private val alphaState: State<Float>) : Effect() {
     constructor(alphaState: gg.essential.elementa.state.State<Float>) : this(alphaState.toV2())
 
+    override fun extractBefore(extractor: ElementaExtractor) {
+        extractor.pushPostProcessing(Factory, alphaState.getUntracked())
+    }
+
+    override fun extractAfter(extractor: ElementaExtractor) {
+        extractor.popPostProcessing(Factory)
+    }
+
+    private object Factory : PostProcessingRenderer.Factory<Float> {
+        override fun create(): PostProcessingRenderer<Float> = Renderer()
+    }
+    private class Renderer : PostProcessingRenderer<Float> {
+        override fun render(
+            destination: UGpuTextureView,
+            source: UGpuTextureView,
+            instances: List<PostProcessingRenderer.Instance<Float>>
+        ) {
+            val device = UGraphics.getDevice()
+
+            val (indexBuffer, indexType) = SharedIndexBuffers.quads(instances.size * 4)
+            UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_TEXTURE_COLOR).apply {
+                for (state in instances) {
+                    val x1 = state.dstX.toDouble()
+                    val y1 = state.dstY.toDouble()
+                    val x2 = x1 + state.width
+                    val y2 = y1 + state.height
+                    val u1 = state.srcX.toDouble() / source.texture.width
+                    val v1 = 1 - state.srcY.toDouble() / source.texture.height
+                    val u2 = u1 + state.width.toDouble() / source.texture.width
+                    val v2 = v1 - state.height.toDouble() / source.texture.height
+                    val alpha = (state.args * 255).toInt()
+                    pos(UMatrixStack.UNIT, x1, y2, 0.0).tex(u1, v2).color(alpha, alpha, alpha, alpha).endVertex()
+                    pos(UMatrixStack.UNIT, x2, y2, 0.0).tex(u2, v2).color(alpha, alpha, alpha, alpha).endVertex()
+                    pos(UMatrixStack.UNIT, x2, y1, 0.0).tex(u2, v1).color(alpha, alpha, alpha, alpha).endVertex()
+                    pos(UMatrixStack.UNIT, x1, y1, 0.0).tex(u1, v1).color(alpha, alpha, alpha, alpha).endVertex()
+                }
+            }.build()!!.use { device.createBuffer(UGpuBuffer.Usage.VERTEX, it.toByteBuffer()) }.use { vertexBuffer ->
+                device.createRenderPass(
+                    URenderPassDescriptor { "AlphaEffect" }
+                        .withColorAttachment(destination)
+                ).use { renderPass ->
+                    val w = destination.texture.width
+                    val h = destination.texture.height
+                    renderPass.projectionMatrix(floatArrayOf(
+                        2f/w, 0f,    0f,   0f,
+                        0f,   -2f/h, 0f,   0f,
+                        0f,   0f,    1f,   0f,
+                        -1f,  1f,    0f,   1f,
+                    ))
+                    renderPass.pipeline(RENDERER_PIPELINE)
+                    renderPass.indexBuffer(indexBuffer, indexType)
+                    renderPass.vertexBuffer(0, vertexBuffer.slice())
+                    renderPass.texture("Sampler0", source, UGpuSampler.NEAREST)
+                    renderPass.drawIndexed(instances.size * 6)
+                }
+            }
+        }
+
+        override fun close() {}
+    }
+
     private lateinit var resources: Resources
 
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Use `extract` instead.",
+        replaceWith = ReplaceWith("extractBefore(extractor)")
+    )
     override fun beforeDraw(matrixStack: UMatrixStack) {
+        if (platform.mcVersion == 0) return // FIXME temporarily disable this effect in standalone mode until the new gui renderer drops
+
         val scale = UResolution.scaleFactor
 
         // Get the coordinates of the component within the bounds of the screen in real pixels
@@ -88,7 +161,13 @@ class AlphaEffect(private val alphaState: State<Float>) : Effect() {
         }.build()?.drawAndClose(CLEAR_PIPELINE)
     }
 
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Use `extract` instead.",
+        replaceWith = ReplaceWith("extractAfter(extractor)")
+    )
     override fun afterDraw(matrixStack: UMatrixStack) {
+        if (platform.mcVersion == 0) return // FIXME temporarily disable this effect in standalone mode until the new gui renderer drops
+
         // Get the coordinates of the component within the bounds of the screen in fractional MC pixels
         val left = boundComponent.getLeft().toDouble().coerceIn(0.0..UResolution.viewportWidth / UResolution.scaleFactor)
         val right = boundComponent.getRight().toDouble().coerceIn(0.0..UResolution.viewportWidth / UResolution.scaleFactor)
@@ -127,7 +206,9 @@ class AlphaEffect(private val alphaState: State<Float>) : Effect() {
     }
 
     fun cleanup() {
-        resources.close()
+        if (platform.mcVersion == 0) return // FIXME temporarily disable this effect in standalone mode until the new gui renderer drops
+
+        if (::resources.isInitialized) resources.close()
     }
 
     private class Resources(effect: AlphaEffect, val width: Int, val height: Int) : PhantomReference<AlphaEffect>(effect, referenceQueue), Closeable {
@@ -194,6 +275,14 @@ class AlphaEffect(private val alphaState: State<Float>) : Effect() {
                 BlendState.Param.ONE_MINUS_DST_ALPHA,
                 BlendState.Param.ONE,
             )
+        }.build()
+
+        private val RENDERER_PIPELINE: URenderPipeline = URenderPipeline.builderWithDefaultShader(
+            "elementa:alpha_effect",
+            UGraphics.DrawMode.QUADS,
+            UGraphics.CommonVertexFormats.POSITION_TEXTURE_COLOR,
+        ).apply {
+            blendState = BlendState.PREMULTIPLIED_ALPHA
         }.build()
     }
 }

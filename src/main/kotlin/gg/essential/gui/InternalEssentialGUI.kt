@@ -43,6 +43,8 @@ abstract class InternalEssentialGUI(
     private var openedAt: Long? = null
 
     init {
+        useElementaRenderer = true
+
         screenOpen.onChange(reference) { open ->
             if (open) {
                 FeatureSessionTelemetry.startEvent(this@InternalEssentialGUI.javaClass.name)
@@ -66,6 +68,14 @@ abstract class InternalEssentialGUI(
         screenOpenMutable.set(true)
     }
     //#endif
+
+    override fun uExtractRenderState(mouseX: Int, mouseY: Int, partialTicks: Float): RenderState {
+        if (openedAt == null) {
+            openedAt = System.currentTimeMillis()
+        }
+
+        return super.uExtractRenderState(mouseX, mouseY, partialTicks)
+    }
 
     override fun onDrawScreen(matrixStack: UMatrixStack, mouseX: Int, mouseY: Int, partialTicks: Float) {
         super.onDrawScreen(matrixStack, mouseX, mouseY, partialTicks)

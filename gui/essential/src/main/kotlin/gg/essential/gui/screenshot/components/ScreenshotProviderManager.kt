@@ -17,6 +17,7 @@ import gg.essential.gui.elementa.state.v2.State
 import gg.essential.gui.elementa.state.v2.combinators.map
 import gg.essential.gui.elementa.state.v2.effect
 import gg.essential.gui.elementa.state.v2.mapEach
+import gg.essential.gui.elementa.state.v2.memo
 import gg.essential.gui.elementa.state.v2.stateOf
 import gg.essential.gui.screenshot.ScreenshotId
 import gg.essential.gui.screenshot.bytebuf.LimitedAllocator
@@ -99,7 +100,7 @@ class ScreenshotProviderManager(
     val currentIds: List<ScreenshotId>
         get() = currentIdsState.getUntracked()
 
-    private val indexByIdState = State { currentIdsState().withIndex().associate { it.value to it.index } }
+    private val indexByIdState = memo { currentIdsState().withIndex().associate { it.value to it.index } }
     val indexById: Map<ScreenshotId, Int>
         get() = indexByIdState.getUntracked()
 

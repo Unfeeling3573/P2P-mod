@@ -67,6 +67,9 @@ class EssentialAnimationSystem(
             for (animationState in animationState.active) {
                 if (animationState.animation.name == ongoingAnimation.name && ongoingAnimation.loops > 0) {
                     val remove = animationState.animTime >= animationState.animation.animationLength * ongoingAnimation.loops
+                    if (remove) {
+                        this.animationState.updateEffects()
+                    }
                     if (remove && ongoingAnimation.onComplete != null) {
                         onComplete.add(ongoingAnimation.onComplete)
                     }

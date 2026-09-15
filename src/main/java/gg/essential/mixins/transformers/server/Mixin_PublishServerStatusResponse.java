@@ -61,7 +61,7 @@ public abstract class Mixin_PublishServerStatusResponse implements MinecraftServ
         McIntegratedServerManager manager =
             this instanceof IntegratedServerExt ? ((IntegratedServerExt) this).getEssential$manager() : null;
         SPSManager spsManager = Essential.getInstance().getConnectionManager().getSpsManager();
-        if (spsManager.getLocalSession() != null) {
+        if (manager != null) {
             // Not using .getJson() directly cause that's Forge-only
             String response;
             try {
@@ -77,7 +77,7 @@ public abstract class Mixin_PublishServerStatusResponse implements MinecraftServ
                 e.printStackTrace();
                 return;
             }
-            spsManager.updateServerStatusResponse(response);
+            manager.updateServerStatusResponse(response);
         }
     }
 }

@@ -24,7 +24,7 @@ import gg.essential.vigilance.utils.onLeftClick
 fun LayoutScope.coinsButton(state: WardrobeState, modifier: Modifier = Modifier) {
     box(Modifier.childBasedMaxWidth(9f).height(17f).color(EssentialPalette.COINS_BLUE).hoverColor(EssentialPalette.COINS_BLUE_HOVER).shadow().hoverScope() then modifier) {
         // We need to align horizontally to end, because the button has a min width
-        coinsText(state, Modifier.alignVertical(Alignment.Center(true)).alignHorizontal(Alignment.End(9f)))
+        coinsText(state, Modifier.alignVertical(Alignment.Center(true)).alignHorizontal(Alignment.End(9f)), Modifier.alignVertical(Alignment.Center(true)).alignHorizontal(Alignment.Center))
         // Used to force the width of the box to the width as if there were 4 digits
         coinsText(stateOf(9999), Modifier.effect { ScissorEffect(0f, 0f, 0f, 0f) })
     }.onLeftClick {

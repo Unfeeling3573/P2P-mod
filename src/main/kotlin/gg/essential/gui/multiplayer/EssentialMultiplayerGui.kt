@@ -33,6 +33,7 @@ import gg.essential.gui.common.modal.configure
 import gg.essential.gui.elementa.VanillaButtonConstraint.Companion.constrainTo
 import gg.essential.gui.elementa.state.v2.ReferenceHolderImpl
 import gg.essential.gui.elementa.state.v2.mutableStateOf
+import gg.essential.gui.elementa.state.v2.onChange
 import gg.essential.gui.elementa.state.v2.stateOf
 import gg.essential.gui.modals.ensurePrerequisites
 import gg.essential.gui.overlay.ModalManager
@@ -48,6 +49,7 @@ import gg.essential.mixins.ext.client.multiplayer.showDownloadIcon
 import gg.essential.network.connectionmanager.serverdiscovery.NewServerDiscoveryManager
 import gg.essential.universal.UScreen
 import gg.essential.util.GuiUtil
+import gg.essential.util.McElementaExtractor
 import gg.essential.util.UDrawContext
 import gg.essential.util.createEssentialTooltip
 import net.minecraft.client.Minecraft
@@ -61,10 +63,6 @@ import net.minecraft.client.multiplayer.ServerData
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo
 import java.time.Instant
 import java.util.concurrent.ThreadLocalRandom
-
-//#if MC>=12106
-//$$ import gg.essential.util.AdvancedDrawContext
-//#endif
 
 //#if MC >= 11600
 //$$ import gg.essential.util.textLiteral
@@ -405,16 +403,17 @@ class EssentialMultiplayerGui {
             tooltip.hideTooltip()
         }
 
-        //#if MC>=12106
-        //$$ AdvancedDrawContext.drawImmediate(drawContext.mc) { matrixStack ->
-        //$$     window.draw(matrixStack)
-        //$$ }
-        //#else
-        window.draw(drawContext.matrixStack)
-        //#endif
+        window.prepareFrame()
+        val extractor = McElementaExtractor(drawContext)
+        window.extract(extractor)
+        extractor.close()
     }
 
     init {
+        Essential.getInstance().worldsManager.remoteSpsSessions.onChange(refHolder) { _ ->
+            if (!initialized) return@onChange
+            updateSpsSessions()
+        }
     }
     fun updateSpsSessions() {
         if (!EssentialConfig.essentialFull) return

@@ -15,7 +15,6 @@ import gg.essential.Essential
 import gg.essential.config.McEssentialConfig
 import gg.essential.data.VersionData
 import gg.essential.elementa.components.UIContainer
-import gg.essential.elementa.constraints.AspectConstraint
 import gg.essential.elementa.dsl.constrain
 import gg.essential.elementa.dsl.pixels
 import gg.essential.elementa.state.BasicState
@@ -50,11 +49,10 @@ import gg.essential.gui.modals.updateAvailableModal
 import gg.essential.gui.proxies.ScreenWithProxiesHandler
 import gg.essential.gui.proxies.ScreenWithProxiesHandler.Companion.mountWithProxy
 import gg.essential.gui.screenshot.components.ScreenshotBrowser
-import gg.essential.gui.sps.WorldShareSettingsGui
+import gg.essential.gui.sps.launchInviteOrHostModalFlow
 import gg.essential.gui.util.pollingStateV2
 import gg.essential.gui.wardrobe.Wardrobe
 import gg.essential.handlers.PauseMenuDisplay
-import gg.essential.network.connectionmanager.sps.SPSSessionSource
 import gg.essential.sps.SpsAddress
 import gg.essential.universal.UMinecraft
 import gg.essential.util.AutoUpdate
@@ -73,19 +71,17 @@ class RightSideBarNew(
     val connectionManager = Essential.getInstance().connectionManager
     private val isMinimalV1 = isMinimal.toV1(this)
     private val isHostingWorld = pollingStateV2 {
-        connectionManager.spsManager.localSession != null
+        Essential.getInstance().worldsManager.integratedServerWorld.getUntracked()?.localWorldOpen?.getUntracked() ?: false
     }
 
-    // Host button is being removed from the singleplayer menu for now until the new panel is released
     private val hostable = menuType == PauseMenuDisplay.MenuType.MAIN
-            // || menuType == PauseMenuDisplay.MenuType.SINGLEPLAYER
+            || (menuType == PauseMenuDisplay.MenuType.SINGLEPLAYER)
 
     private val hasInviteButton = memo {
         val currentServer = UMinecraft.getMinecraft().currentServerData
         val isSpsServer = currentServer?.let { SpsAddress.parse(it.serverIP) } != null
-        (!hostable && !isSpsServer) || isHostingWorld()
+        (!hostable && !isSpsServer)
     }
-    private val worldSettingsVisible = isHostingWorld
 
     private val messageCount = connectionManager.chatManager.unreadMessageCount
         .zip(connectionManager.socialMenuNewFriendRequestNoticeManager.unseenFriendRequestCount())
@@ -115,15 +111,7 @@ class RightSideBarNew(
             Alignment.End
         ) {
             if (true) { // for indent, may be removed when convenient
-                if (isMinimal.getUntracked()) {
-                    worldSettingsButton()
-                }
-                row(Arrangement.spacedBy(3f)) {
-                    if (!isMinimal.getUntracked()) {
-                        worldSettingsButton()
-                    }
-                    inviteOrHostButton()
-                }
+                inviteOrHostButton()
                 row(Arrangement.spacedBy(3f)) {
                     messageFlag()
                     socialButton()
@@ -140,9 +128,6 @@ class RightSideBarNew(
                 }
                 if_({ !hostableOrHasInviteButton() }) {
                     buttonPlaceholder() // offset the invite/host button placeholder if it is not visible
-                }
-                if_({ isMinimal() && !worldSettingsVisible() }) {
-                    buttonPlaceholder() // offset the world settings button placeholder if it is not visible
                 }
             }
         }
@@ -176,24 +161,6 @@ class RightSideBarNew(
                 }).hoverScope())
             } `else` {
                 flagPlaceholder()
-            }
-        }
-    }
-
-    private fun LayoutScope.worldSettingsButton() {
-        mountWithProxy(proxyHandler, "world_host",) {
-            if_({ worldSettingsVisible()}) {
-                MenuButton {
-                    GuiUtil.openScreen { WorldShareSettingsGui() }
-                }.constrain {
-                    width = 20.pixels
-                    height = AspectConstraint()
-                }.setIcon(EssentialPalette.HOST_5X.state())(Modifier.hoverScope().then(State {
-                        val position = if (isMinimal()) EssentialTooltip.Position.LEFT else EssentialTooltip.Position.ABOVE
-                        Modifier.hoverTooltip("World Host Settings", position = position)
-                }))
-            } `else` {
-                spacer(20f, 20f)
             }
         }
     }
@@ -331,7 +298,7 @@ class RightSideBarNew(
         const val BUTTON_WIDTH = 80f
 
         fun hostOrInviteButtonPressed() {
-            PauseMenuDisplay.showInviteOrHostModal(SPSSessionSource.PAUSE_MENU)
+            launchInviteOrHostModalFlow()
         }
 
     }

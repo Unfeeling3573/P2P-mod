@@ -161,24 +161,6 @@ class MicrosoftAccountSessionFactory(private val savePath: Path, oldSavePath: Pa
         account.toSession()
     }
 
-    private fun getExpiryTime(uuid: UUID): Instant? {
-        return lock.read {
-            state.accounts.find { it.uuid == uuid }?.auth?.expiryTime
-        }
-    }
-
-    private fun refreshRefreshToken(uuid: UUID) {
-        val account = state.accounts.find { it.uuid == uuid } ?: throw InvalidCredentialsException()
-
-        try {
-            account.auth.refreshRefreshToken()
-        } finally {
-            // Always save, even if we were unable to fully refresh the session (we might have
-            // succeeded in refreshing parts of it).
-            save()
-        }
-    }
-
     override val sessions: Map<UUID, USession>
         get() = lock.read {
             state.accounts.associate { it.uuid to it.toSession() }
@@ -231,15 +213,16 @@ class MicrosoftAccountSessionFactory(private val savePath: Path, oldSavePath: Pa
      * of the chain will expire, and they will need to oauth again. To prevent this from
      * happening, we will automatically refresh the refresh token every 2 weeks.
      */
-    fun refreshRefreshTokensIfNecessary() {
-        for ((uuid, session) in sessions) {
-            getExpiryTime(uuid)?.let {
-                val username = session.username
+    fun refreshRefreshTokensIfNecessary() = lock.write {
+        for (account in state.accounts) {
+            val uuid = account.uuid
+            account.auth.expiryTime?.let {
+                val username = account.name
                 Essential.logger.debug("$username $uuid expires $it")
                 if (it.isBefore(Instant.now().plus(90 - 14, ChronoUnit.DAYS))) {
                     Essential.logger.info("Refreshing the refresh token for $username $uuid")
                     try {
-                        refreshRefreshToken(uuid)
+                        account.auth.refreshRefreshToken()
                     } catch (e: InvalidCredentialsException) {
                         Window.enqueueRenderOperation {
                             Notifications.error("Account Error", "") {
@@ -250,6 +233,10 @@ class MicrosoftAccountSessionFactory(private val savePath: Path, oldSavePath: Pa
                                 )
                             }
                         }
+                    } finally {
+                        // Always save, even if we were unable to fully refresh the session (we might have
+                        // succeeded in refreshing parts of it).
+                        save()
                     }
                 }
             }

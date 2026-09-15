@@ -26,9 +26,11 @@ import gg.essential.gui.elementa.state.v2.effect
 import gg.essential.gui.elementa.state.v2.memo
 import gg.essential.gui.elementa.state.v2.mutableStateOf
 import gg.essential.mixins.ext.client.multiplayer.ext
+import gg.essential.sps.SpsAddress
 import gg.essential.util.AddressUtil
 import gg.essential.util.AddressUtil.isLanOrLocalAddress
 import gg.essential.util.AddressUtil.removeDefaultPort
+import gg.essential.util.USession
 import me.kbrewster.eventbus.Subscribe
 import net.minecraft.client.gui.GuiMainMenu
 
@@ -43,12 +45,19 @@ class ServerStatusHandler {
         }
     }
 
-    // this should always reflect the current activity state regardless of whether it is being sent to the network
-    private val currentActivity: MutableState<Activity> = mutableStateOf(Activity.None)
+    private val eventDrivenCurrentActivity: MutableState<Activity> = mutableStateOf(Activity.None)
 
     // this should reflect the current activity state for the network considering privacy settings
     private val published = memo {
-        val current = currentActivity()
+        val current = run {
+            val worldsManager = Essential.getInstance().worldsManager
+            val integratedServerWorld = worldsManager.integratedServerWorld()
+            when {
+                integratedServerWorld != null && integratedServerWorld.localWorldOpen() ->
+                    Activity(ActivityType.PLAYING, SpsAddress(USession.active().uuid).toString())
+                else -> eventDrivenCurrentActivity()
+            }
+        }
         if (EssentialConfig.essentialEnabledState() && (current.privacyOverride ?: EssentialConfig.sendServerUpdatesState())) current else Activity.None
     }
 
@@ -64,12 +73,12 @@ class ServerStatusHandler {
 
     @Subscribe
     fun onGuiSwitch(event: GuiOpenEvent) {
-        if (event.gui is GuiMainMenu) currentActivity.set(Activity.None)
+        if (event.gui is GuiMainMenu) eventDrivenCurrentActivity.set(Activity.None)
     }
 
     @Subscribe
     fun disconnectEvent(event: ServerLeaveEvent) {
-        currentActivity.set(Activity.None)
+        eventDrivenCurrentActivity.set(Activity.None)
     }
 
     @Subscribe
@@ -77,17 +86,16 @@ class ServerStatusHandler {
         val serverData = event.serverData
         val serverIP = serverData.serverIP
         val metadata = if (isLanOrLocalAddress(serverIP)) AddressUtil.LOCAL_SERVER else removeDefaultPort(serverIP)
-        currentActivity.set(Activity(ActivityType.PLAYING, metadata,
+        eventDrivenCurrentActivity.set(Activity(ActivityType.PLAYING, metadata,
             serverData.ext.`essential$shareWithFriends`)) // individual servers may declare their own privacy setting to override the global one
     }
 
     @Subscribe
     fun joinSinglePlayer(event: SingleplayerJoinEvent) {
-        currentActivity.set(Activity(ActivityType.PLAYING, AddressUtil.SINGLEPLAYER))
+        eventDrivenCurrentActivity.set(Activity(ActivityType.PLAYING, AddressUtil.SINGLEPLAYER))
     }
 
     @Subscribe
     fun hostWorld(event: SPSStartEvent) {
-        currentActivity.set(Activity(ActivityType.PLAYING, event.address))
     }
 }

@@ -20,6 +20,7 @@ import gg.essential.elementa.constraints.ChildBasedSizeConstraint
 import gg.essential.elementa.constraints.animation.AnimatingConstraints
 import gg.essential.elementa.dsl.constrain
 import gg.essential.elementa.dsl.percent
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.elementa.state.BasicState
 import gg.essential.gui.common.onSetValueAndNow
 import gg.essential.gui.elementa.state.v2.combinators.map
@@ -193,7 +194,7 @@ class CategoryComponent(
         }
     }
 
-    override fun draw(matrixStack: UMatrixStack) {
+    private fun checkScrolling() {
         // Check if the scroller is still smooth-scrolling, needs to be in `draw` because that's where ScrollComponent
         // initiates the scroll animation (if we checked in animationFrame, the animation might not yet have started).
         if (scroller.children.first().constraints !is AnimatingConstraints) {
@@ -201,7 +202,19 @@ class CategoryComponent(
             // again.
             updatingScrollBasedOnCategory = false
         }
+    }
 
+    override fun extractComponent(extractor: ElementaExtractor) {
+        checkScrolling()
+    }
+
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
+    override fun draw(matrixStack: UMatrixStack) {
+        checkScrolling()
+        @Suppress("DEPRECATION")
         super.draw(matrixStack)
     }
 

@@ -41,7 +41,7 @@ public class Mixin_FixServerStatusWhenUpdatingIcon {
 
             // OptiFine
             //#if FORGE
-            //#if MC >= 1.20.4
+            //#if MC >= 1.20.1
             //$$ "lambda$takeAutoScreenshot$68",
             //#elseif MC >= 1.19.4
             //$$ "lambda$takeAutoScreenshot$66",

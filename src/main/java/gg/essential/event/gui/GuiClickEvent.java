@@ -46,7 +46,11 @@ public class GuiClickEvent extends CancellableEvent {
     }
 
     public int getButton() {
+        //#if MC >= 26.3
+        //$$ return gg.essential.universal.UMouse.INSTANCE.buttonSdlToGlfw(button);
+        //#else
         return button;
+        //#endif
     }
 
     public GuiScreen getScreen() {

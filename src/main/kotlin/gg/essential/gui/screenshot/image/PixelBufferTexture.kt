@@ -11,12 +11,11 @@
  */
 package gg.essential.gui.screenshot.image
 
-import gg.essential.gui.screenshot.downsampling.ErrorImage
 import gg.essential.gui.screenshot.downsampling.PixelBuffer
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UMinecraft
 import gg.essential.universal.render.UGpuFormat
-import gg.essential.universal.render.UGpuTextureView
+import gg.essential.universal.render.UGpuTexture
 import net.minecraft.client.renderer.GlStateManager
 
 import org.lwjgl.opengl.GL11
@@ -47,25 +46,18 @@ import java.nio.IntBuffer
  */
 class PixelBufferTexture(debugLabel: String, image: PixelBuffer) : AutoCloseable {
 
-    // Whether this texture's underlying image had an error during loading
-    // To be used in ScreenshotBrowser for alternate behavior
-    val error = image is ErrorImage
-
     val imageWidth: Int = image.getWidth()
     val imageHeight: Int = image.getHeight()
 
     //#if MC >= 1.21.5
-    //$$ var glTexture: GpuTexture? = null
-    //$$ val glTextureId: Int
-    //$$     get() = (glTexture as GlTexture?)?.glId ?: -1
+    //$$ val glTexture: GpuTexture
     //#else
-    var glTextureId: Int = -1
+    val glTextureId: Int
     //#endif
 
-    var uGpuTextureView: UGpuTextureView? = null
+    val uGpuTexture: UGpuTexture
 
     init {
-        if(image !is ErrorImage) {
             //#if MC>=12106
             //$$ glTexture = RenderSystem.getDevice().createTexture(debugLabel, GpuTexture.USAGE_TEXTURE_BINDING or GpuTexture.USAGE_COPY_DST, TextureFormat.RGBA8, imageWidth, imageHeight, 1, 1)
             //#elseif MC>=12105
@@ -81,16 +73,13 @@ class PixelBufferTexture(debugLabel: String, image: PixelBuffer) : AutoCloseable
             //#endif
 
             //#if MC >= 1.21.5
-            //$$ val ucGpuTexture = UGraphics.getPlatformAdapter().texture(glTexture!!)
+            //$$ uGpuTexture = UGraphics.getPlatformAdapter().texture(glTexture!!)
             //#else
-            val ucGpuTexture = UGraphics.getPlatformAdapter().texture(glTextureId, UGpuFormat.DEFAULT_RGBA, imageWidth, imageHeight, 1)
+            uGpuTexture = UGraphics.getPlatformAdapter().texture(glTextureId, UGpuFormat.DEFAULT_RGBA, imageWidth, imageHeight, 1)
             //#endif
-            uGpuTextureView = UGraphics.getDevice().createTextureView(ucGpuTexture)
-        }
     }
 
     fun upload(image: PixelBuffer) {
-        if (image !is ErrorImage) {
             //#if MC >= 26.2
             //$$ if (glTexture !is GlTexture) {
             //$$     RenderSystem.getDevice().createCommandEncoder()
@@ -148,12 +137,11 @@ class PixelBufferTexture(debugLabel: String, image: PixelBuffer) : AutoCloseable
 
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR)
             GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR)
-        }
     }
 
     override fun close() {
         //#if MC >= 1.21.5
-        //$$ glTexture?.close()
+        //$$ glTexture.close()
         //#else
         UGraphics.deleteTexture(glTextureId)
         //#endif

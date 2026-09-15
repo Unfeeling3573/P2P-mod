@@ -56,8 +56,9 @@ class CoinsManager(val connectionManager: CMConnection) : NetworkedManager {
     private var currentCodeValidationJob: Job? = null
 
     // Actual data
-    private val mutableCoins: MutableState<Int> = mutableStateOf(0)
-    private val mutableCoinsSpent: MutableState<Int> = mutableStateOf(0)
+    // Coins default to null until loaded to prevent user confusion.
+    private val mutableCoins: MutableState<Int?> = mutableStateOf(null)
+    private val mutableCoinsSpent: MutableState<Int?> = mutableStateOf(null)
     private val mutablePricing: MutableListState<CoinBundle> = mutableListStateOf()
     private val mutableCurrencies: MutableSetState<Currency> = mutableSetState(USD_CURRENCY)
     private val checkedCreatorCodes = mutableStateOf(mapOf<String, String?>())
@@ -74,8 +75,8 @@ class CoinsManager(val connectionManager: CMConnection) : NetworkedManager {
 
     // Derived data
     val creatorCode = stateBy { (creatorCodeConfigured() ?: creatorCodeNonPersistent()).uppercase() }
-    val coins: State<Int> = mutableCoins
-    val coinsSpent: State<Int> = mutableCoinsSpent
+    val coins: State<Int?> = mutableCoins
+    val coinsSpent: State<Int?> = mutableCoinsSpent
     val pricing: ListState<CoinBundle> = mutablePricing
     val currencies: ListState<Currency> = mutableCurrencies.map { currencies ->
         currencies.sortedBy { it.currencyCode } // We should probably look at this ordering when we add more currencies
@@ -115,8 +116,8 @@ class CoinsManager(val connectionManager: CMConnection) : NetworkedManager {
     }
 
     override fun resetState() {
-        mutableCoins.set(0)
-        mutableCoinsSpent.set(0)
+        mutableCoins.set(null)
+        mutableCoinsSpent.set(null)
     }
 
     fun purchaseBundle(bundle: CoinBundle, callback: (URI) -> Unit) {
@@ -239,7 +240,7 @@ class CoinsManager(val connectionManager: CMConnection) : NetworkedManager {
 
     fun tryClaimingWelcomeCoins() {
         // We only try to claim if they don't have coins and if they haven't spent any coins yet. (Basically new user)
-        if (coins.get() != 0 || coinsSpent.get() != 0) return
+        if ((coins.getUntracked() ?: 0) != 0 || (coinsSpent.getUntracked() ?: 0) != 0) return
 
         isClaimingCoins.set(true)
         // Freeze coins until we get a response to prevent the balance packet we receive as a response from animating them

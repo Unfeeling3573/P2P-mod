@@ -14,7 +14,7 @@ package gg.essential.mixins.transformers.server;
 import gg.essential.mixins.DummyTarget;
 import org.spongepowered.asm.mixin.Mixin;
 
-// 26.2+ Only
+// 26.2 Only
 @Mixin(DummyTarget.class)
 public abstract class Mixin_DisableDefaultGameModeChange {
 }

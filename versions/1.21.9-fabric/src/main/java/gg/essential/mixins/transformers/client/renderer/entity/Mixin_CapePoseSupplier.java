@@ -37,7 +37,11 @@ import static dev.folomeev.kotgl.matrix.vectors.Vectors.vecZero;
 @Mixin(CapeFeatureRenderer.class)
 public abstract class Mixin_CapePoseSupplier implements CapePoseSupplier {
     private static final String RENDER = "render(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;ILnet/minecraft/client/render/entity/state/PlayerEntityRenderState;FF)V";
+    //#if MC >= 26.3
+    //$$ private static final String SUBMIT_MODEL = "Lnet/minecraft/client/renderer/SubmitNodeCollector;submitModel(Lnet/minecraft/client/model/Model;Ljava/lang/Object;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/rendertype/RenderType;III)V";
+    //#else
     private static final String SUBMIT_MODEL = "Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;submitModel(Lnet/minecraft/client/model/Model;Ljava/lang/Object;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/RenderLayer;IIILnet/minecraft/client/render/command/ModelCommandRenderer$CrumblingOverlayCommand;)V";
+    //#endif
 
     @Shadow @Final private BipedEntityModel<PlayerEntityRenderState> model;
 

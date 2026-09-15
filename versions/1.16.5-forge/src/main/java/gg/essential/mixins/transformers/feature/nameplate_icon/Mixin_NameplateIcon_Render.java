@@ -20,6 +20,7 @@ import gg.essential.cosmetics.IconCosmeticRenderer;
 import gg.essential.handlers.OnlineIndicator;
 import gg.essential.model.ModelInstance;
 import gg.essential.universal.UMatrixStack;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.player.AbstractClientPlayerEntity;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.renderer.IRenderTypeBuffer;
@@ -29,8 +30,6 @@ import net.minecraft.util.math.vector.Matrix4f;
 import net.minecraft.util.text.ITextComponent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-
-import static gg.essential.universal.utils.TextUtilsKt.toFormattedString;
 
 //#if MC>=12102
 //$$ import gg.essential.mixins.impl.client.model.PlayerEntityRenderStateExt;
@@ -97,8 +96,10 @@ public class Mixin_NameplateIcon_Render<T extends Entity> {
             }
         }
 
+        int stringWidth = Minecraft.getInstance().fontRenderer.getStringPropertyWidth(text);
+
         IconCosmeticRenderer.INSTANCE.drawNameTagIconAndVersionConsistentPadding(
-                new UMatrixStack(vMatrixStack), buffer, alwaysOnTop, color, backgroundColor, icon, toFormattedString(text), light);
+                new UMatrixStack(vMatrixStack), buffer, alwaysOnTop, color, backgroundColor, icon, stringWidth, light);
 
         //#if MC < 1.21.6
         return

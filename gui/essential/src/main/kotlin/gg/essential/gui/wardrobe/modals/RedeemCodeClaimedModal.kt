@@ -122,7 +122,7 @@ class RedeemCodeClaimedModal(
                     {
                         coinPackImage(wardrobeState.coinsManager, product.amount, Modifier.fillParent())
                     }
-                ) { coinsText(product.amount, titleModifier) }
+                ) { coinsText(product.amount, textShadow = Color.BLACK, modifier = Modifier.alignHorizontal(Alignment.Start)) }
             }
             else -> {
                 entry(product.state, Color.WHITE, {}) { text("Unknown Item", titleModifier) }

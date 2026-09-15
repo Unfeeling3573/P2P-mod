@@ -38,6 +38,10 @@ import java.io.ByteArrayInputStream
 import gg.essential.model.util.UMatrixStack as CMatrixStack
 import gg.essential.model.util.UVertexConsumer as CVertexConsumer
 
+//#if MC >= 26.3
+//$$ import com.mojang.renderpearl.api.textures.GpuTextureView
+//#endif
+
 //#if MC >= 26.2
 //$$ import net.minecraft.client.Minecraft
 //$$ import net.minecraft.client.renderer.SubmitNodeStorage
@@ -281,6 +285,9 @@ object MinecraftRenderBackend : RenderBackend {
     //$$     override fun texture(u: Float, v: Float): VertexConsumer = this
     //$$     override fun overlay(u: Int, v: Int): VertexConsumer = this
     //$$     override fun light(u: Int, v: Int): VertexConsumer = this
+        //#if MC >= 26.3
+        //$$ override fun setUv3(u: Float, v: Float): VertexConsumer = this
+        //#endif
     //$$     override fun normal(x: Float, y: Float, z: Float): VertexConsumer = this
         //#if MC>=12111
         //$$ override fun color(argb: Int): VertexConsumer = this
@@ -398,6 +405,11 @@ object MinecraftRenderBackend : RenderBackend {
         return false
     }
 
+    //#if MC >= 26.3
+    //$$ var outputColorTexture: GpuTextureView? = null
+    //$$ var outputDepthTexture: GpuTextureView? = null
+    //#endif
+
     class CommandQueue : RenderBackend.CommandQueue {
         private class Key(
             val texture: MinecraftTexture,
@@ -479,7 +491,23 @@ object MinecraftRenderBackend : RenderBackend {
             //$$ val dispatcher = Minecraft.getInstance().gameRenderer.featureRenderDispatcher()
             //$$ val submitNodeStorage = SubmitNodeStorage()
             //$$ copyTo(MinecraftCommandQueue(submitNodeStorage))
+            //#if MC >= 26.3
+            //$$ dispatcher.prepareFrame(submitNodeStorage).use { frame ->
+            //$$     RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+            //$$         { "Cosmetics" },
+            //$$         outputColorTexture!!,
+            //$$         java.util.Optional.empty(),
+            //$$         outputDepthTexture,
+            //$$         java.util.OptionalDouble.empty(),
+            //$$     ).use { renderPass ->
+            //$$         RenderSystem.bindDefaultUniforms(renderPass);
+            //$$         net.minecraft.client.renderer.feature.FeatureRenderDispatcher
+            //$$             .renderAllFeatures(renderPass, frame);
+            //$$     }
+            //$$ }
+            //#else
             //$$ dispatcher.renderAllFeatures(submitNodeStorage)
+            //#endif
             //#else
             //#if MC >= 1.14
             //$$ val immediate = net.minecraft.client.Minecraft.getInstance().renderTypeBuffers.bufferSource

@@ -78,8 +78,10 @@ public abstract class Mixin_Emissive_Elytra {
             OverlayTexture.DEFAULT_UV,
             -1,
             null,
-            outlineColor,
-            null
+            outlineColor
+            //#if MC < 26.3
+            , null
+            //#endif
         );
     }
 }

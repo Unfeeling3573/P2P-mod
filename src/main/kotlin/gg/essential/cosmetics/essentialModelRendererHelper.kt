@@ -11,7 +11,7 @@
  */
 package gg.essential.cosmetics
 
-import gg.essential.gui.common.CosmeticHoverOutlineEffect
+import gg.essential.gui.common.CosmeticHoverOutlineHook
 import gg.essential.model.backend.RenderBackend
 import gg.essential.model.backend.minecraft.MinecraftRenderBackend
 
@@ -19,7 +19,7 @@ import gg.essential.model.backend.minecraft.MinecraftRenderBackend
 //$$ import net.minecraft.client.renderer.IRenderTypeBuffer
 //#endif
 
-fun CosmeticHoverOutlineEffect.renderCosmeticsForOutlines(queues: Map<CosmeticId, MinecraftRenderBackend.CommandQueue>) {
+fun CosmeticHoverOutlineHook.renderCosmeticsForOutlines(queues: Map<CosmeticId, MinecraftRenderBackend.CommandQueue>) {
     //#if MC >= 1.16 && MC < 26.2
     //$$ net.minecraft.client.Minecraft.getInstance().renderTypeBuffers.bufferSource.finish()
     //#endif

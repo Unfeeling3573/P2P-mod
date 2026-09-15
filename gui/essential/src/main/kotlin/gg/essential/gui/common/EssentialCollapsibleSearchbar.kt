@@ -27,6 +27,7 @@ import gg.essential.universal.UKeyboard
 import gg.essential.gui.util.isInComponentTree
 import gg.essential.vigilance.utils.onLeftClick
 import java.awt.Color
+import kotlin.math.ceil
 
 open class EssentialSearchbar(
     placeholder: String = "Search...",
@@ -79,6 +80,17 @@ open class EssentialSearchbar(
         textContentV2.onSetValue(this) {
             if (it != searchInput.getText()) {
                 searchInput.setText(it)
+            }
+        }
+
+        if (activateOnType) {
+            addUpdateFunc { _, _ ->
+                if (Window.of(this).focusedComponent == null) {
+                    UKeyboard.startTextInput(searchInput)
+                    val x = searchInput.getLeft()
+                    val y = searchInput.getTop()
+                    UKeyboard.setTextInputArea(x.toInt(), y.toInt(), x.toInt() + 1, ceil(y + searchInput.lineHeight).toInt())
+                }
             }
         }
 

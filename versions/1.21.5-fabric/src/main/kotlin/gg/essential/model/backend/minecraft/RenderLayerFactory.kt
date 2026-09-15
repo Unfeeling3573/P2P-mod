@@ -28,13 +28,19 @@ import net.minecraft.client.render.RenderLayer
 import net.minecraft.util.Identifier
 import net.minecraft.util.TriState
 
+//#if MC >= 26.3
+//$$ import com.mojang.renderpearl.api.pipeline.ShaderType
+//#endif
+
 //#if MC >= 26.1
 //$$ import com.mojang.blaze3d.pipeline.ColorTargetState
 //#endif
 
 //#if MC>=12111
 //$$ import net.minecraft.client.render.LayeringTransform
+//#if MC < 26.3
 //$$ import net.minecraft.client.render.OutputTarget
+//#endif
 //$$ import net.minecraft.client.render.RenderSetup
 //#endif
 
@@ -58,8 +64,13 @@ abstract class RenderLayerFactory : RenderLayer("dummy", 0, false, false, {}, {}
 
         private fun RenderPipeline.Builder.copyFrom(pipeline: RenderPipeline): RenderPipeline.Builder = apply {
             withLocation(pipeline.location)
+            //#if MC >= 26.3
+            //$$ withVertexShader(pipeline.shaders.getValue(ShaderType.VERTEX))
+            //$$ withFragmentShader(pipeline.shaders.getValue(ShaderType.FRAGMENT))
+            //#else
             withVertexShader(pipeline.vertexShader)
             withFragmentShader(pipeline.fragmentShader)
+            //#endif
             pipeline.shaderDefines.values.forEach { (key, value) ->
                 if ("." in value) withShaderDefine(key, value.toFloat())
                 else withShaderDefine(key, value.toInt())
@@ -126,6 +137,9 @@ abstract class RenderLayerFactory : RenderLayer("dummy", 0, false, false, {}, {}
                 "armor_translucent_emissive",
                 //#if MC>=12111
                 //$$ RenderSetup.builder(RenderPipelines.ENTITY_EYES)
+                    //#if MC >= 26.3
+                    //$$ .setOitPipelines(RenderPipelines.OIT_EYES)
+                    //#endif
                 //$$     .crumbling()
                 //$$     .translucent()
                 //$$     .texture("Sampler0", texture)
@@ -154,6 +168,9 @@ abstract class RenderLayerFactory : RenderLayer("dummy", 0, false, false, {}, {}
                 "entity_translucent_cull",
                 //#if MC>=12111
                 //$$ RenderSetup.builder(entityTranslucentCullPipeline)
+                    //#if MC >= 26.3
+                    //$$ .setOitPipelines(RenderPipelines.OIT_ENTITY_CULL)
+                    //#endif
                 //$$     .crumbling()
                 //$$     .translucent()
                 //$$     .texture("Sampler0", texture)
@@ -185,7 +202,7 @@ abstract class RenderLayerFactory : RenderLayer("dummy", 0, false, false, {}, {}
             .assignIrisProgram {{ IrisProgram.PARTICLES_TRANSLUCENT }}
             //#endif
 
-        //#if MC>=12109
+        //#if MC >= 1.21.9 && MC < 26.3
         //#if MC>=12111
         //$$ private val PARTICLES_TARGET = OutputTarget("particles") {
         //#else
@@ -213,7 +230,11 @@ abstract class RenderLayerFactory : RenderLayer("dummy", 0, false, false, {}, {}
             //$$     .texture("Sampler0", texture)
             //$$     .useLightmap()
             //$$
+            //#if MC >= 26.3
+            //$$ if (renderPass.material != Cutout) builder.setOitPipelines(RenderPipelines.OIT_PARTICLE)
+            //#else
             //$$ if (renderPass.material != Cutout) builder.outputTarget(PARTICLES_TARGET)
+            //#endif
             //#else
             val builder = MultiPhaseParameters.builder()
                 .texture(texture, false)

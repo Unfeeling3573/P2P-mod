@@ -61,7 +61,7 @@ public abstract class Mixin_GuiKeyTypedEvent {
         //$$ }
         //#endif
 
-        GuiKeyTypedEvent event = new GuiKeyTypedEvent((GuiScreen) (Object) this, typedChar, keyCode);
+        GuiKeyTypedEvent event = new GuiKeyTypedEvent((GuiScreen) (Object) this, typedChar, keyCode, -1);
         Essential.EVENT_BUS.post(event);
         if (event.isCancelled()) {
             ci.cancel();

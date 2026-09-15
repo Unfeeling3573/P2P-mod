@@ -12,9 +12,12 @@
 package gg.essential.gui.common
 
 import gg.essential.elementa.UIComponent
-import gg.essential.elementa.components.UIBlock.Companion.drawBlock
+import gg.essential.elementa.components.image.extractMcScale
 import gg.essential.elementa.dsl.constrain
 import gg.essential.elementa.dsl.pixels
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
+import gg.essential.elementa.renderer.fillMcScale
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.elementa.state.v2.MutableState
 import gg.essential.gui.elementa.state.v2.ReferenceHolderImpl
@@ -62,38 +65,42 @@ abstract class EssentialToggle(
         }.applyToComponent(this)
     }
 
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
     override fun draw(matrixStack: UMatrixStack) {
+        @Suppress("DEPRECATION")
         beforeDraw(matrixStack)
-
-        val x = getLeft().toDouble()
-        val y = getTop().toDouble()
-        val width = getWidth().toDouble()
-        val height = getHeight().toDouble()
-        val switchPos = switchState.getUntracked() * (width * 0.5)
-
-        matrixStack.push()
-        matrixStack.translate(1f, 1f, 0f)
-        drawInner(matrixStack, EssentialPalette.BLACK, x, y, width, height, switchPos)
-        matrixStack.pop()
-
-        drawInner(matrixStack, getColor(), x, y, width, height, switchPos)
-
-        drawIndicator(matrixStack, x + switchPos, y, switchState)
-
+        extractComponent(ImmediateElementaExtractor(matrixStack))
+        @Suppress("DEPRECATION")
         super.draw(matrixStack)
     }
 
-    private fun drawInner(matrixStack: UMatrixStack, color: Color, x: Double, y: Double, width: Double, height: Double,
-                          switchPos: Double) {
-        drawBlock(matrixStack, color, x, y, x + width, y + 1)
-        drawBlock(matrixStack, color, x, y + height - 1, x + width, y + height)
-        drawBlock(matrixStack, color, x, y + 1, x + 1, y + height - 1)
-        drawBlock(matrixStack, color, x + width - 1, y + 1, x + width, y + height - 1)
+    override fun extractComponent(extractor: ElementaExtractor) {
+        val x = getLeft()
+        val y = getTop()
+        val width = getWidth()
+        val height = getHeight()
+        val switchPos = switchState.getUntracked() * (width * 0.5f)
 
-        drawBlock(matrixStack, color, x + switchPos, y + 1, x + (width * 0.5) + switchPos, y + height - 1)
+        extractInner(extractor, EssentialPalette.BLACK, x + 1, y + 1, width, height, switchPos)
+
+        extractInner(extractor, getColor(), x, y, width, height, switchPos)
+
+        extractIndicator(extractor, x + switchPos, y, switchState)
     }
 
-    protected abstract fun drawIndicator(matrixStack: UMatrixStack, x: Double, y: Double, switchState: State<Float>)
+    private fun extractInner(extractor: ElementaExtractor, color: Color, x: Float, y: Float, width: Float, height: Float, switchPos: Float) {
+        extractor.fillMcScale(x, y, x + width, y + 1, color)
+        extractor.fillMcScale(x, y + height - 1, x + width, y + height, color)
+        extractor.fillMcScale(x, y + 1, x + 1, y + height - 1, color)
+        extractor.fillMcScale(x + width - 1, y + 1, x + width, y + height - 1, color)
+
+        extractor.fillMcScale(x + switchPos, y + 1, x + (width * 0.5f) + switchPos, y + height - 1, color)
+    }
+
+    protected abstract fun extractIndicator(extractor: ElementaExtractor, x: Float, y: Float, switchState: State<Float>)
 
     protected abstract fun color(hovered: Boolean, value: Boolean): Color
 
@@ -119,11 +126,11 @@ class FullEssentialToggle(
         }
     }
 
-    override fun drawIndicator(matrixStack: UMatrixStack, x: Double, y: Double, switchState: State<Float>) {
+    override fun extractIndicator(extractor: ElementaExtractor, x: Float, y: Float, switchState: State<Float>) {
         if (switchState.getUntracked() > 0.5f) {
-            onIndicator.drawImage(matrixStack, x + 4.5, y + 3, 1.0, 5.0, toggleIndicatorColor(hovered.getUntracked(), true))
+            onIndicator.extractMcScale(extractor, x + 4.5f, y + 3, 1f, 5f, toggleIndicatorColor(hovered.getUntracked(), true))
         } else {
-            offIndicator.drawImage(matrixStack, x + 3, y + 3, 4.0, 5.0, toggleIndicatorColor(hovered.getUntracked(), false))
+            offIndicator.extractMcScale(extractor, x + 3, y + 3, 4f, 5f, toggleIndicatorColor(hovered.getUntracked(), false))
         }
     }
 
@@ -181,7 +188,7 @@ class CompactEssentialToggle(
         }
     }
 
-    override fun drawIndicator(matrixStack: UMatrixStack, x: Double, y: Double, switchState: State<Float>) {
+    override fun extractIndicator(extractor: ElementaExtractor, x: Float, y: Float, switchState: State<Float>) {
         // noop
     }
 

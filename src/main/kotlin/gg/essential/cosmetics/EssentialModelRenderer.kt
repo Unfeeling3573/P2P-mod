@@ -12,7 +12,7 @@
 package gg.essential.cosmetics
 
 import gg.essential.config.EssentialConfig
-import gg.essential.gui.common.CosmeticHoverOutlineEffect
+import gg.essential.gui.common.CosmeticHoverOutlineHook
 import gg.essential.mixins.impl.client.gui.GuiInventoryExt
 import gg.essential.model.EnumPart
 import gg.essential.model.backend.RenderBackend
@@ -127,7 +127,7 @@ class EssentialModelRenderer(
         //#if MC >= 1.21.9
         //$$ // Hover outline with vanilla renderer is no longer supported, UI3DPlayer.FallbackPlayer is always used
         //#else
-        CosmeticHoverOutlineEffect.active?.renderCosmeticsForOutlines(queues)
+        CosmeticHoverOutlineHook.active?.renderCosmeticsForOutlines(queues)
 
         val combinedQueue = MinecraftRenderBackend.CommandQueue()
         queues.values.forEach { it.copyTo(combinedQueue) }

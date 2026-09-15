@@ -11,8 +11,8 @@
  */
 package gg.essential.mixins.transformers.client.renderer.entity;
 
+import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.client.renderer.culling.ICamera;
 import net.minecraft.client.renderer.entity.Render;
 import net.minecraft.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -37,7 +37,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class Mixin_WorkaroundIncorrectFrustumCheckAtHighSpeed<T extends Entity> {
 
     @Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true)
-    private void workaroundFastPlayerFrustumCheck(T entity, ICamera camera, double x, double y, double z, CallbackInfoReturnable<Boolean> ci) {
+    private void workaroundFastPlayerFrustumCheck(CallbackInfoReturnable<Boolean> ci, @Local(argsOnly = true) T entity) {
         if (entity instanceof EntityPlayerSP) {
             ci.setReturnValue(true);
         }

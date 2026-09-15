@@ -107,11 +107,10 @@ class AccountManagerModal(
     private fun LayoutScope.entry(accountInfo: AccountManager.AccountInfo) {
         val uuid = accountInfo.uuid
         val name = accountInfo.name
-        val isOriginal = memo { accountInfo in accountManager.originalAccounts() }
         val isActive = State { USession.active().uuid == uuid }
 
         fun openContextMenu(event: UIClickEvent) {
-            if (isActive.getUntracked() || isOriginal.getUntracked()) {
+            if (isActive.getUntracked() || !accountInfo.isManagedByEssential) {
                 return
             }
             ContextOptionMenu.create(ContextOptionMenu.Position(event), Window.of(this@AccountManagerModal),
@@ -150,7 +149,7 @@ class AccountManagerModal(
                     } `else` {
                         box(Modifier.width(12f).heightAspect(1f).alignVertical(Alignment.Start).hoverScope()) {
                             val iconModifier = memo {
-                                if (isOriginal()) {
+                                if (!accountInfo.isManagedByEssential) {
                                     Modifier.color(EssentialPalette.TEXT_DARK_DISABLED).hoverTooltip(
                                         "Cannot sign out of account\nused to launch Minecraft",
                                         position = EssentialTooltip.Position.ABOVE

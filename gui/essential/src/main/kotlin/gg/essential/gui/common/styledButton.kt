@@ -12,6 +12,8 @@
 package gg.essential.gui.common
 
 import gg.essential.elementa.UIComponent
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
 import gg.essential.elementa.utils.withAlpha
 import gg.essential.gui.elementa.state.v2.State
 import gg.essential.gui.elementa.state.v2.combinators.map
@@ -73,10 +75,20 @@ class StyledButton(
         }
     }
 
-    /** Copied from [MenuButton.draw]. */
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
     override fun draw(matrixStack: UMatrixStack) {
+        @Suppress("DEPRECATION")
         beforeDraw(matrixStack)
+        extractComponent(ImmediateElementaExtractor(matrixStack))
+        @Suppress("DEPRECATION")
+        super.draw(matrixStack)
+    }
 
+    /** Copied from [MenuButton.extractComponent]. */
+    override fun extractComponent(extractor: ElementaExtractor) {
         val style = currentStyle.getUntracked()
         val hovered = hovered.getUntracked()
 
@@ -85,7 +97,7 @@ class StyledButton(
                 val (type, texture) = MenuButton.ButtonTextures.currentTexture(hovered)
 
                 if (texture == null) {
-                    drawDefaultButton(matrixStack, style)
+                    extractDefaultButton(extractor, style)
                 } else {
                     // If the button is one of these states, we don't want to tint it unless the user has darkening
                     // enabled, which is handled in `drawTexturedButton`.
@@ -94,8 +106,8 @@ class StyledButton(
                     val isDefaultOrHoveredBaseColor =
                         style.buttonColor == (if (hovered) MenuButton.GRAY else MenuButton.DARK_GRAY).buttonColor
 
-                    MenuButton.drawTexturedButton(
-                        matrixStack,
+                    MenuButton.extractTexturedButton(
+                        extractor,
                         getLeft().toDouble(),
                         getTop().toDouble(),
                         getRight().toDouble(),
@@ -107,16 +119,14 @@ class StyledButton(
                     )
                 }
             } else {
-                drawDefaultButton(matrixStack, style)
+                extractDefaultButton(extractor, style)
             }
         }
-
-        super.draw(matrixStack)
     }
 
-    private fun drawDefaultButton(matrixStack: UMatrixStack, style: MenuButton.Style) {
-        MenuButton.drawButton(
-            matrixStack,
+    private fun extractDefaultButton(extractor: ElementaExtractor, style: MenuButton.Style) {
+        MenuButton.extractButton(
+            extractor,
             getLeft().toDouble() + 1.0,
             getTop().toDouble() + 1.0,
             getRight().toDouble() - 1.0,

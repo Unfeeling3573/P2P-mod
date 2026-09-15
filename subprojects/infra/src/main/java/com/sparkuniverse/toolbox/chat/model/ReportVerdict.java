@@ -56,4 +56,8 @@ public class ReportVerdict {
         return reason;
     }
 
+    @NotNull
+    public com.sparkuniverse.toolbox.chat.enums.ReportVerdict getVerdict() {
+        return verdict;
+    }
 }

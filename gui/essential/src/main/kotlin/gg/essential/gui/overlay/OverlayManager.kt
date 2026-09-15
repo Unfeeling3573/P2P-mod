@@ -11,6 +11,8 @@
  */
 package gg.essential.gui.overlay
 
+import gg.essential.elementa.ElementaVersion
+
 /**
  * Manages [Layer]s to be displayed above the vanilla screen.
  */
@@ -34,4 +36,8 @@ interface OverlayManager {
      * Removes the given layer.
      */
     fun removeLayer(layer: Layer)
+
+    companion object {
+        val ELEMENTA_VERSION: ElementaVersion = ElementaVersion.V10
+    }
 }

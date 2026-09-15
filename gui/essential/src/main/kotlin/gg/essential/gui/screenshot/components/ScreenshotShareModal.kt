@@ -22,24 +22,27 @@ import gg.essential.gui.screenshot.ScreenshotId
 import gg.essential.handlers.screenshot.ClientScreenshotMetadata
 import gg.essential.network.connectionmanager.features.Feature
 import gg.essential.util.GuiEssentialPlatform.Companion.platform
-import kotlinx.coroutines.future.await
+import java.util.concurrent.CompletableFuture
 
 suspend fun ModalFlow.shareScreenshotModal(
     screenshot: ScreenshotId,
     metadata: ClientScreenshotMetadata? = null,
-) {
+): CompletableFuture<*> {
     ensurePrerequisites(listOf(Feature.SOCIAL, Feature.MEDIA) )
 
-    val selectedChannels = selectScreenshotShareTargetsModal()?.toList() ?: return
+    val selectedChannels = selectScreenshotShareTargetsModal()?.toList() ?: return CompletableFuture.completedFuture(Unit)
     val screenshotManager = platform.screenshotManager
-    when (screenshot) {
+    return when (screenshot) {
         is LocalScreenshot -> if (metadata != null) {
-            screenshotManager.uploadAndShareLinkToChannels(selectedChannels, screenshot.path, metadata).await()
+            screenshotManager.uploadAndShareLinkToChannels(selectedChannels, screenshot.path, metadata)
         } else {
-            screenshotManager.uploadAndShareLinkToChannels(selectedChannels, screenshot.path).await()
+            screenshotManager.uploadAndShareLinkToChannels(selectedChannels, screenshot.path)
         }
 
-        is RemoteScreenshot -> screenshotManager.shareLinkToChannels(selectedChannels, screenshot.media)
+        is RemoteScreenshot -> {
+            screenshotManager.shareLinkToChannels(selectedChannels, screenshot.media)
+            CompletableFuture.completedFuture(Unit)
+        }
     }
 }
 

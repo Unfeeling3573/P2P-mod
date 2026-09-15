@@ -26,7 +26,7 @@ public class GuiMainMenuHook extends ClassHook<GuiMainMenu> {
     //$$ // We now catch keyboard events before they get to the Screen instance
     //#else
     public GuiKeyTypedEvent keyTyped(char typedChar, int keyCode) {
-        GuiKeyTypedEvent event = new GuiKeyTypedEvent(instance, typedChar, keyCode);
+        GuiKeyTypedEvent event = new GuiKeyTypedEvent(instance, typedChar, keyCode, -1);
         Essential.EVENT_BUS.post(event);
         return event;
     }

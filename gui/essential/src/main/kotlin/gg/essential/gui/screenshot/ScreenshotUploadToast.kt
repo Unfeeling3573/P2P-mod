@@ -14,7 +14,6 @@ package gg.essential.gui.screenshot
 import com.sparkuniverse.toolbox.chat.model.Channel
 import gg.essential.api.gui.Slot
 import gg.essential.elementa.UIComponent
-import gg.essential.elementa.components.UIBlock.Companion.drawBlock
 import gg.essential.elementa.components.UIContainer
 import gg.essential.elementa.components.UIText
 import gg.essential.elementa.components.Window
@@ -31,6 +30,9 @@ import gg.essential.elementa.dsl.pixel
 import gg.essential.elementa.dsl.pixels
 import gg.essential.elementa.dsl.provideDelegate
 import gg.essential.elementa.dsl.toConstraint
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
+import gg.essential.elementa.renderer.fillMcScale
 import gg.essential.elementa.state.BasicState
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.common.shadow.ShadowIcon
@@ -67,32 +69,37 @@ class ScreenshotUploadToast : UIContainer() {
             isFloating = true
         }
 
+        @Deprecated(
+            "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+            replaceWith = ReplaceWith("extract(extractor)")
+        )
         override fun draw(matrixStack: UMatrixStack) {
+            @Suppress("DEPRECATION")
             beforeDraw(matrixStack)
-
-            val x = constraints.getX().toDouble()
-            val y = constraints.getY().toDouble()
-            val width = constraints.getWidth().toDouble()
-            val height = constraints.getHeight().toDouble()
-
-            val percent = progressStateAnimated.getUntracked().toDouble()
-
-            matrixStack.push()
-            matrixStack.translate(1f, 1f, 0f)
-            drawInner(matrixStack, x, y, width, height, percent, EssentialPalette.TEXT_SHADOW_LIGHT)
-            matrixStack.pop()
-            drawInner(matrixStack, x, y, width, height, percent, EssentialPalette.TEXT_HIGHLIGHT)
-
+            extractComponent(ImmediateElementaExtractor(matrixStack))
+            @Suppress("DEPRECATION")
             super.draw(matrixStack)
         }
 
-        private fun drawInner(matrixStack: UMatrixStack, x: Double, y: Double, width: Double, height: Double, percent: Double, color: Color) {
-            drawBlock(matrixStack, color, x, y, x + width, y + 1)
-            drawBlock(matrixStack, color, x, y + height - 1, x + width, y + height)
-            drawBlock(matrixStack, color, x, y + 1, x + 1, y + height - 1)
-            drawBlock(matrixStack, color, x + width - 1, y + 1, x + width, y + height - 1)
+        override fun extractComponent(extractor: ElementaExtractor) {
+            val x = constraints.getX()
+            val y = constraints.getY()
+            val width = constraints.getWidth()
+            val height = constraints.getHeight()
 
-            drawBlock(matrixStack, color, x + 1, y + 1, x + (width - 2) * percent, y + height - 1)
+            val percent = progressStateAnimated.getUntracked()
+
+            extractInner(extractor, x + 1, y + 1, width, height, percent, EssentialPalette.TEXT_SHADOW_LIGHT)
+            extractInner(extractor, x, y, width, height, percent, EssentialPalette.TEXT_HIGHLIGHT)
+        }
+
+        private fun extractInner(extractor: ElementaExtractor, x: Float, y: Float, width: Float, height: Float, percent: Float, color: Color) {
+            extractor.fillMcScale(x, y, x + width, y + 1, color)
+            extractor.fillMcScale(x, y + height - 1, x + width, y + height, color)
+            extractor.fillMcScale(x, y + 1, x + 1, y + height - 1, color)
+            extractor.fillMcScale(x + width - 1, y + 1, x + width, y + height - 1, color)
+
+            extractor.fillMcScale(x + 1, y + 1, x + 1 + (width - 2) * percent, y + height - 1, color)
         }
     }.constrain {
         x = SiblingConstraint(4f)

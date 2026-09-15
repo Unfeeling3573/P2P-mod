@@ -18,30 +18,30 @@ import gg.essential.api.commands.DisplayName
 import gg.essential.api.commands.SubCommand
 import gg.essential.commands.engine.EssentialFriend
 import gg.essential.commands.engine.EssentialUser
-import gg.essential.handlers.PauseMenuDisplay
-import gg.essential.network.connectionmanager.sps.SPSSessionSource
+import gg.essential.gui.sps.launchInviteOrHostModalFlow
+import gg.essential.sps.WorldManager
 import gg.essential.universal.ChatColor
 import gg.essential.universal.UMinecraft
-import gg.essential.upnp.model.UPnPSession
 import gg.essential.util.*
 import kotlinx.coroutines.future.await
-import net.minecraft.client.Minecraft
-import java.time.Duration
-import java.time.Instant
+import java.lang.IllegalStateException
 import java.util.*
 
 abstract class CommandOpBase(name: String) : Command(name) {
 
     val spsManager = Essential.getInstance().connectionManager.spsManager
+    val worldManager: WorldManager
+        get() = Essential.getInstance().worldsManager.integratedServerWorld.getUntracked()
+            ?: throw IllegalStateException("Command should not be registered")
 
     @DefaultHandler
     suspend fun handle(@DisplayName("player") user: EssentialUser) {
-        if (!spsManager.isAllowCheats) {
+        if (!worldManager.gameSettings.getUntracked().cheats) {
             MinecraftUtils.sendMessage("Cheats must be enabled to use the op command.")
             return
         }
 
-        if (user.uuid !in spsManager.invitedUsers) {
+        if (user.uuid !in worldManager.members.getUntracked()) {
             if (this is CommandOp) {
                 MinecraftUtils.sendMessage("Cannot op ${user.name} because they are not invited to your world")
             } else {
@@ -59,8 +59,8 @@ abstract class CommandOpBase(name: String) : Command(name) {
 object CommandDeOp : CommandOpBase("deop") {
 
     override suspend fun apply(uuid: UUID, username: String) {
-        if (uuid in spsManager.oppedPlayers) {
-            spsManager.updateOppedPlayers(spsManager.oppedPlayers - uuid)
+        if (uuid in worldManager.gameSettings.getUntracked().ops) {
+            worldManager.updateGameSettings { it.copy(ops = it.ops - uuid) }
             MinecraftUtils.sendMessage("Removed op from $username.")
         } else {
             MinecraftUtils.sendMessage("$username is not opped.")
@@ -71,10 +71,10 @@ object CommandDeOp : CommandOpBase("deop") {
 object CommandOp : CommandOpBase("op") {
 
     override suspend fun apply(uuid: UUID, username: String) {
-        if (uuid in spsManager.oppedPlayers) {
+        if (uuid in worldManager.gameSettings.getUntracked().ops) {
             MinecraftUtils.sendMessage("$username is already opped.")
         } else {
-            spsManager.updateOppedPlayers(spsManager.oppedPlayers + uuid)
+            worldManager.updateGameSettings { it.copy(ops = it.ops + uuid) }
             MinecraftUtils.sendMessage("$username is now opped.")
         }
     }
@@ -99,7 +99,11 @@ object CommandInvite : Command("einvite") {
         if (serverType !is ServerType.SPS.Host) {
             when (serverType) {
                 is ServerType.Singleplayer -> {
-                    PauseMenuDisplay.showInviteOrHostModal(prepopulatedInvites = setOf(uuid), source = SPSSessionSource.COMMAND)
+                    val worldManager = Essential.getInstance().worldsManager.integratedServerWorld.getUntracked()
+                    if (worldManager != null) {
+                        worldManager.updateLocalWorldInfo { it.copy(invited = it.invited + uuid) }
+                    }
+                    launchInviteOrHostModalFlow()
                 }
                 is ServerType.Multiplayer -> {
                     // Reinvite in case they're already invited, so they receive the notification again
@@ -111,14 +115,16 @@ object CommandInvite : Command("einvite") {
             return
         }
 
-        val spsManager = connectionManager.spsManager
+        val worldManager = Essential.getInstance().worldsManager.integratedServerWorld.getUntracked()
+            .let { it!! } // already checked serverType above
 
-        if (uuid in spsManager.invitedUsers) {
+        if (uuid in worldManager.members.getUntracked()) {
             MinecraftUtils.sendMessage("$username is already invited to your world.")
             return
         }
 
-        spsManager.updateInvitedUsers(spsManager.invitedUsers + uuid)
+
+        worldManager.updateLocalWorldInfo { it.copy(invited = it.invited + uuid) }
         MinecraftUtils.sendMessage("Invited $username to your world.")
     }
 
@@ -154,14 +160,16 @@ private suspend fun cancelInviteAndKick(uuid: UUID, username: String, kick: Bool
         return
     }
 
-    val spsManager = connectionManager.spsManager
+    val worldManager = Essential.getInstance().worldsManager.integratedServerWorld.getUntracked()
+        .let { it!! } // already checked serverType above
 
-    if (uuid !in spsManager.invitedUsers) {
+    if (uuid !in worldManager.members.getUntracked()) {
         MinecraftUtils.sendMessage("$username is not invited to your world.")
         return
     }
 
-    spsManager.updateInvitedUsers(spsManager.invitedUsers - uuid)
+
+    worldManager.updateLocalWorldInfo { it.copy(invited = it.invited - uuid) }
 
     if (kick) {
         MinecraftUtils.sendMessage("Kicked $username")
@@ -193,7 +201,7 @@ object CommandSession : Command("esession") {
         when (ServerType.current()) {
             is ServerType.SPS.Host -> MinecraftUtils.sendMessage("Cannot start session, one is already running.")
             is ServerType.Singleplayer, is ServerType.SupportsInvites -> {
-                PauseMenuDisplay.showInviteOrHostModal(SPSSessionSource.COMMAND)
+                launchInviteOrHostModalFlow()
             }
             else -> MinecraftUtils.sendMessage("Cannot start session, your current world does not support invites")
         }
@@ -204,12 +212,11 @@ object CommandSession : Command("esession") {
         val currentServerData = UMinecraft.getMinecraft().currentServerData
 
         val spsManager = connectionManager.spsManager
+        val worldManager = Essential.getInstance().worldsManager.integratedServerWorld.getUntracked()
 
         when {
-
-            // Hosting a single player world
-            Minecraft.getMinecraft().isIntegratedServerRunning && spsManager.localSession != null -> {
-                spsManager.closeLocalSession()
+            worldManager != null && worldManager.localWorldOpen.getUntracked() -> {
+                worldManager.localShareSession.set(null)
                 MinecraftUtils.sendMessage("Closed session")
             }
 
@@ -227,13 +234,12 @@ object CommandSession : Command("esession") {
 
     @SubCommand("info", description = "Info about your world share session")
     suspend fun handleInfo() {
-
-        val localSession = connectionManager.spsManager.localSession
-        if (localSession == null) {
+        val worldManager = Essential.getInstance().worldsManager.integratedServerWorld.getUntracked()
+        if (worldManager == null || !worldManager.localWorldOpen.getUntracked()) {
             handleInfoNoSps()
             return
         }
-        handleInfoSpsOld(localSession)
+        handleInfoSps(worldManager)
     }
 
     suspend fun handleInfoNoSps() {
@@ -251,28 +257,22 @@ object CommandSession : Command("esession") {
         MinecraftUtils.sendMessage("No session running")
     }
 
-    suspend fun handleInfoSpsOld(localSession: UPnPSession) {
-        val spsManager = connectionManager.spsManager
-        MinecraftUtils.sendMessage("Privacy setting: ${localSession.privacy}")
-        MinecraftUtils.sendMessage("Cheats for all: ${spsManager.isAllowCheats}")
-        MinecraftUtils.sendMessage("Default gamemode: ${spsManager.currentGameMode}")
-        MinecraftUtils.sendMessage("Difficulty: ${spsManager.difficulty}")
-        MinecraftUtils.sendMessage(
-            "World uptime: ${
-                Duration.between(spsManager.sessionStartTime, Instant.now()).toShortString()
-            }"
-        )
+    suspend fun handleInfoSps(worldManager: WorldManager) {
+        val settings = worldManager.gameSettings.getUntracked()
+        MinecraftUtils.sendMessage("Cheats for all: ${settings.cheats}")
+        MinecraftUtils.sendMessage("Default gamemode: ${settings.gameMode}")
+        MinecraftUtils.sendMessage("Difficulty: ${settings.difficulty}")
         MinecraftUtils.sendMessage("Invited Players: ")
-        (spsManager.invitedUsers + UUIDUtil.getClientUUID()).forEach { invitedUser ->
-            val username = UUIDUtil.getName(invitedUser).await()
+        for (user in worldManager.members.getUntracked()) {
+            val username = UUIDUtil.getName(user).await()
             val colorPrefix = when {
-                invitedUser == UUIDUtil.getClientUUID() -> ChatColor.AQUA
-                spsManager.getOnlineState(invitedUser).getUntracked() -> ChatColor.GREEN
+                user == UUIDUtil.getClientUUID() -> ChatColor.AQUA
+                user in worldManager.connectedMembers.getUntracked() -> ChatColor.GREEN
                 else -> ChatColor.GRAY
             }
-            val suffix = when(invitedUser) {
-                UUIDUtil.getClientUUID() -> " (Host)"
-                in spsManager.oppedPlayers -> " (OP)"
+            val suffix = when(user) {
+                worldManager.host.getUntracked() -> " (Host)"
+                in settings.ops -> " (OP)"
                 else -> ""
             }
             MinecraftUtils.sendMessage("$colorPrefix - $username$suffix")

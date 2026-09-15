@@ -40,6 +40,13 @@ object WindowTitleManager {
     private var beforeFirstFrame = true
 
     fun register() {
+        val worldsManager = Essential.getInstance().worldsManager
+        effect(referenceHolder) {
+            // Trigger effect when local SPS session state changes
+            worldsManager.integratedServerWorld()?.localShareSession()
+
+            updateTitle()
+        }
 
         effect(referenceHolder) {
             // Run effect when config value changes

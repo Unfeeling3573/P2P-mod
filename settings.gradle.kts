@@ -58,6 +58,7 @@ val subprojects = listOf(
     ":ice",
     ":immediatelyfast",
     ":infra",
+    ":iris-api-stub",
     ":kdiscordipc",
     ":libs",
     ":lwjgl3",
@@ -127,6 +128,7 @@ listOfNotNull(
     "1.21.11-fabric",
     "26.1-fabric",
     "26.2-fabric",
+    "26.3-fabric",
 ).forEach { version ->
     include(":$version")
     project(":$version").apply {

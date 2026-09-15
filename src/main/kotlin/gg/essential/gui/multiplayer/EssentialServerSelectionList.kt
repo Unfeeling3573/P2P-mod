@@ -49,6 +49,7 @@ class EssentialServerSelectionList(
     private val connectionManager = Essential.getInstance().connectionManager
     private val profileManager = connectionManager.profileManager
     private val spsManager = connectionManager.spsManager
+    private val worldsManager = Essential.getInstance().worldsManager
     private val serverDiscoveryManager = connectionManager.serverDiscoveryManager
 
     private val serverListInternet
@@ -93,7 +94,7 @@ class EssentialServerSelectionList(
         //#endif
 
         // Add all the SPS sessions which we have access to
-        for (session in spsManager.remoteSessions) {
+        for (session in worldsManager.remoteSpsSessions.getUntracked()) {
             val address = SpsAddress(session.hostUUID).toString()
             val server = ServerData("Loading username…", address, mcServerType).apply {
                 ext.isTrusted = false

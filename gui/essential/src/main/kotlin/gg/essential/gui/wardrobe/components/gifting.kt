@@ -78,7 +78,11 @@ fun openGiftModal(item: Item.CosmeticOrEmote, state: WardrobeState) {
     }
 
     val requiredCoinsSpent = state.settings.giftingCoinSpendRequirement.get()
-    val coinsSpent = state.coinsSpent.get()
+    val coinsSpent = state.coinsSpent.getUntracked()
+    if (coinsSpent == null) {
+        showErrorToast("Please try again later")
+        return
+    }
     if (coinsSpent < requiredCoinsSpent) {
         launchModalFlow(platform.createModalManager()) {
             cannotGiftYetModal(requiredCoinsSpent)
@@ -135,7 +139,12 @@ private fun showErrorToast(message: String) {
 
 private suspend fun giftItemToFriends(item: Item.CosmeticOrEmote, uuids: Set<UUID>, state: WardrobeState) {
     val cost = (item.getCost(state).getUntracked() ?: 0) * uuids.size
-    if (cost > state.coins.getUntracked()) {
+    val coins = state.coins.getUntracked()
+    if (coins == null) {
+        showErrorToast("Error getting your coins balance!")
+        return
+    }
+    if (cost > coins) {
         CoinsPurchaseModal.open(state, cost)
         return
     }

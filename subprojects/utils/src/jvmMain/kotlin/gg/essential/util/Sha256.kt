@@ -77,5 +77,7 @@ class Sha256(val bytes: ByteArray) {
             }
         }
 
+        fun fromOrNull(hexStr: String): Sha256? =
+            try { Sha256(hexStr) } catch (e: IllegalArgumentException) { null }
     }
 }

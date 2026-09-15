@@ -16,20 +16,32 @@ import gg.essential.elementa.components.UIContainer
 import gg.essential.elementa.components.UIImage
 import gg.essential.elementa.constraints.CenterConstraint
 import gg.essential.elementa.effects.Effect
+import gg.essential.elementa.font.extractMcScale
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
+import gg.essential.elementa.renderer.fillMcScale
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.common.LoadingIcon
 import gg.essential.gui.common.SequenceAnimatedUIImage
 import gg.essential.gui.elementa.state.v2.State
 import gg.essential.gui.elementa.state.v2.stateOf
-import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
 import java.awt.Color
+import kotlin.math.roundToInt
 
 class ShadowEffect(private val shadowColorState: State<Color>) : Effect() {
     constructor(shadowColor: Color = EssentialPalette.COMPONENT_BACKGROUND) :
             this(stateOf(shadowColor))
 
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Use `extract` instead.",
+        replaceWith = ReplaceWith("extractBefore(extractor)")
+    )
     override fun beforeDraw(matrixStack: UMatrixStack) {
+        extractBefore(ImmediateElementaExtractor(matrixStack))
+    }
+
+    override fun extractBefore(extractor: ElementaExtractor) {
         val shadowColor = shadowColorState.getUntracked()
         when (val boundComponent = boundComponent) {
             is EssentialUIText -> {
@@ -43,40 +55,38 @@ class ShadowEffect(private val shadowColorState: State<Color>) : Effect() {
                 val x = boundComponent.getLeft()
                 val y = boundComponent.getTop() + (if (constraints.y is CenterConstraint) fontProvider.getBelowLineHeight() * scale else 0f)
 
-                UGraphics.enableBlend()
-
-                fontProvider.drawString(
-                    matrixStack,
+                fontProvider.extractMcScale(
+                    extractor,
                     text, shadowColor, x + 1, y + 1,
-                    10f, scale, false
+                    scale, false
                 )
             }
             is SequenceAnimatedUIImage -> {
                 val child = boundComponent.currentFrameComponent ?: return
-                child.drawImage(
-                    matrixStack,
-                    boundComponent.getLeft() + 1.0,
-                    boundComponent.getTop() + 1.0,
-                    boundComponent.getWidth().toDouble(),
-                    boundComponent.getHeight().toDouble(),
+                child.extract(
+                    extractor,
+                    ((boundComponent.getLeft() + 1.0) * extractor.guiScale).roundToInt(),
+                    ((boundComponent.getTop() + 1.0) * extractor.guiScale).roundToInt(),
+                    (boundComponent.getWidth() * extractor.guiScale).roundToInt(),
+                    (boundComponent.getHeight() * extractor.guiScale).roundToInt(),
                     shadowColor
                 )
             }
             is UIBlock, is UIContainer -> {
-                val x = boundComponent.getLeft().toDouble()
-                val y = boundComponent.getTop().toDouble()
-                val x2 = boundComponent.getRight().toDouble()
-                val y2 = boundComponent.getBottom().toDouble()
+                val x = boundComponent.getLeft()
+                val y = boundComponent.getTop()
+                val x2 = boundComponent.getRight()
+                val y2 = boundComponent.getBottom()
 
-                UIBlock.drawBlock(matrixStack, shadowColor, x+1, y+1, x2+1, y2+1)
+                extractor.fillMcScale(x+1, y+1, x2+1, y2+1, shadowColor)
             }
             is UIImage -> {
-                boundComponent.drawImage(
-                    matrixStack,
-                    boundComponent.getLeft() + 1.0,
-                    boundComponent.getTop() + 1.0,
-                    boundComponent.getWidth().toDouble(),
-                    boundComponent.getHeight().toDouble(),
+                boundComponent.extract(
+                    extractor,
+                    ((boundComponent.getLeft() + 1.0) * extractor.guiScale).roundToInt(),
+                    ((boundComponent.getTop() + 1.0) * extractor.guiScale).roundToInt(),
+                    (boundComponent.getWidth() * extractor.guiScale).roundToInt(),
+                    (boundComponent.getHeight() * extractor.guiScale).roundToInt(),
                     shadowColor
                 )
             }
@@ -84,11 +94,11 @@ class ShadowEffect(private val shadowColorState: State<Color>) : Effect() {
                 val xCenter = (boundComponent.getLeft() + boundComponent.getRight()) / 2
                 val yCenter = (boundComponent.getTop() + boundComponent.getBottom()) / 2
 
-                LoadingIcon.draw(
-                    matrixStack,
+                LoadingIcon.extract(
+                    extractor,
                     xCenter + boundComponent.scale.toInt(),
                     yCenter + boundComponent.scale.toInt(),
-                    boundComponent.scale,
+                    boundComponent.scale.toFloat(),
                     boundComponent.time,
                     shadowColor
                 )

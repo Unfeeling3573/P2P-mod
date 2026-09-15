@@ -90,11 +90,6 @@ object ResourcePackSharingHttpServer {
         this.server = server
     }
 
-    fun stopServer() {
-        server?.stop(0)
-        server = null
-    }
-
     private fun sendFile(file: Path, exchange: HttpExchange) {
         exchange.sendResponseHeaders(HttpStatus.OK, file.fileSize())
         file.inputStream().use {
@@ -114,7 +109,11 @@ object ResourcePackSharingHttpServer {
         if (repositoryEntries.isEmpty()) {
             return null
         }
+        //#if MC >= 26.3
+        //$$ return repositoryEntries.last().open().findFirst().orElse(null)
+        //#else
         return repositoryEntries.last().resourcePack
+        //#endif
     }
 
     fun onShareResourcePackEnable() {

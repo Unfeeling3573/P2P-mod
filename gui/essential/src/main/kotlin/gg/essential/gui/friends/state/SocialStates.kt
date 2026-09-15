@@ -278,7 +278,8 @@ interface IStatusStates {
 
     fun getActivityState(uuid: UUID): StateV2<PlayerActivity>
 
-    fun getActivity(uuid: UUID): PlayerActivity
+    @Deprecated("Use State")
+    fun getActivity(uuid: UUID): PlayerActivity = getActivityState(uuid).getUntracked()
 
     fun joinSession(uuid: UUID): Boolean
 }

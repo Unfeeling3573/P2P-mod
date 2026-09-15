@@ -11,12 +11,16 @@
  */
 package gg.essential.gui.multiplayer
 
-import gg.essential.elementa.components.UIBlock
+import gg.essential.elementa.font.DefaultFonts.VANILLA_FONT_RENDERER
+import gg.essential.elementa.font.extractMcScale
+import gg.essential.elementa.renderer.fillMcScale
 import gg.essential.gui.EssentialPalette
 import gg.essential.mixins.ext.client.gui.essential
 import gg.essential.mixins.ext.client.gui.ext
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
+import gg.essential.util.McElementaExtractor
+import gg.essential.util.UDrawContext
 import net.minecraft.client.gui.GuiMultiplayer
 
 //#if MC>=12000
@@ -97,26 +101,27 @@ class DividerServerListEntry(
         //$$ val y = this.contentY
         //$$ val entryWidth = this.width
         //#endif
-        //#if MC>=12106
-        //$$ // FIXME This is a bit wasteful, but there should only be at most two of these at any one time.
-        //$$ //       But once we have a more general DrawContext in UC/Elementa, we should get rid of this.
-        //$$ gg.essential.util.AdvancedDrawContext.drawImmediate(drawContext) { matrixStack ->
-        //#elseif MC>=12000
-        //$$ val matrixStack = UMatrixStack(drawContext.matrices)
-        //#elseif MC>=11600
-        //$$ val matrixStack = UMatrixStack(mcMatrixStack)
-        //#else
-        val matrixStack = UMatrixStack.UNIT
-        //#endif
+
+        val extractor = McElementaExtractor(UDrawContext(
+            //#if MC >= 1.20
+            //$$ drawContext,
+            //$$ UMatrixStack(drawContext.matrices)
+            //#elseif MC >= 1.16
+            //$$ UMatrixStack(mcMatrixStack)
+            //#else
+            UMatrixStack()
+            //#endif
+        ))
 
         val textY = y + 4
-        UGraphics.drawString(
-            matrixStack,
+        VANILLA_FONT_RENDERER.extractMcScale(
+            extractor,
             title,
+            EssentialPalette.TEXT_DISABLED,
             x.toFloat(),
             textY.toFloat(),
-            EssentialPalette.TEXT_DISABLED.rgb,
-            EssentialPalette.COMPONENT_BACKGROUND.rgb
+            1f,
+            shadowColor = EssentialPalette.COMPONENT_BACKGROUND,
         )
 
         val titleWidth = UGraphics.getStringWidth(title)
@@ -125,10 +130,13 @@ class DividerServerListEntry(
         if (adIndicator) {
             val adTextX = x + entryWidth - adTextWidth - 5
 
-            UGraphics.drawString(
-                matrixStack, AD_TEXT,
+            VANILLA_FONT_RENDERER.extractMcScale(
+                extractor,
+                AD_TEXT,
+                EssentialPalette.TEXT_DISABLED,
                 adTextX.toFloat(), textY.toFloat(),
-                EssentialPalette.TEXT_DISABLED.rgb, EssentialPalette.COMPONENT_BACKGROUND.rgb
+                1f,
+                shadowColor = EssentialPalette.COMPONENT_BACKGROUND,
             )
 
             if (mouseX >= adTextX && mouseX <= adTextX + adTextWidth && mouseY >= textY && mouseY <= textY + 8) {
@@ -144,17 +152,22 @@ class DividerServerListEntry(
 
         val rightPadding = if (adIndicator) adTextWidth + 6 + 5 else 5
 
-        UIBlock.drawBlock(
-            matrixStack, EssentialPalette.COMPONENT_BACKGROUND, (x + titleWidth + 6).toDouble(),
-            (textY + 4).toDouble(), (x + entryWidth - rightPadding).toDouble(), (textY + 5).toDouble()
+        extractor.fillMcScale(
+           (x + titleWidth + 6).toFloat(),
+           (textY + 4).toFloat(),
+           (x + entryWidth - rightPadding).toFloat(),
+            (textY + 5).toFloat(),
+            EssentialPalette.COMPONENT_BACKGROUND,
         )
-        UIBlock.drawBlock(
-            matrixStack, EssentialPalette.TEXT_DISABLED, (x + titleWidth + 5).toDouble(),
-            (textY + 3).toDouble(), (x + entryWidth - rightPadding - 1).toDouble(), (textY + 4).toDouble()
+        extractor.fillMcScale(
+            (x + titleWidth + 5).toFloat(),
+            (textY + 3).toFloat(),
+            (x + entryWidth - rightPadding - 1).toFloat(),
+            (textY + 4).toFloat(),
+            EssentialPalette.TEXT_DISABLED,
         )
-        //#if MC>=12106
-        //$$ }
-        //#endif
+
+        extractor.close()
     }
 
     //#if MC>=11900

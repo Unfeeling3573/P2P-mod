@@ -17,6 +17,7 @@ import gg.essential.elementa.constraints.PixelConstraint
 import gg.essential.elementa.dsl.*
 import gg.essential.elementa.effects.Effect
 import gg.essential.elementa.effects.ScissorEffect
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.universal.UMatrixStack
 
 /**
@@ -44,18 +45,48 @@ abstract class EffectWithFakeComponent(private val effect: Effect) : Effect() {
         dummyComponent.animationFrame()
     }
 
+    override fun extractBefore(extractor: ElementaExtractor) {
+        if (!initialised) {
+            this.preFirstDraw()
+        }
+        effect.extractBefore(extractor)
+    }
+
+    override fun extractAfter(extractor: ElementaExtractor) {
+        effect.extractAfter(extractor)
+    }
+
+    override fun extractBeforeChildren(extractor: ElementaExtractor) {
+        effect.extractBeforeChildren(extractor)
+    }
+
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Use `extract` instead.",
+        replaceWith = ReplaceWith("extractBefore(extractor)")
+    )
     override fun beforeDraw(matrixStack: UMatrixStack) {
         if (!initialised) {
             this.preFirstDraw()
         }
+        @Suppress("DEPRECATION")
         effect.beforeDraw(matrixStack)
     }
 
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Use `extract` instead.",
+        replaceWith = ReplaceWith("extractAfter(extractor)")
+    )
     override fun afterDraw(matrixStack: UMatrixStack) {
+        @Suppress("DEPRECATION")
         effect.afterDraw(matrixStack)
     }
 
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Use `extract` instead.",
+        replaceWith = ReplaceWith("extractBeforeChildren(extractor)")
+    )
     override fun beforeChildrenDraw(matrixStack: UMatrixStack) {
+        @Suppress("DEPRECATION")
         effect.beforeChildrenDraw(matrixStack)
     }
 

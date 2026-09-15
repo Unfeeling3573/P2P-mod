@@ -12,7 +12,6 @@
 package gg.essential.util.lwjgl3
 
 import gg.essential.util.classloader.RelaunchClassLoader
-import gg.essential.util.lwjgl3.asm.GLBridgeTransformer
 import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
@@ -29,8 +28,8 @@ import java.nio.file.StandardCopyOption
  * classes must be named based on the interface they're implementing with an additional `Impl` suffix, and must be
  * located in the `impl` rather than the `api` package.
  */
-class Lwjgl3Loader(nativesDir: Path, gl3: Lazy<Boolean>) {
-    private val loader = RelaunchClassLoader(arrayOf(findExtractedBundleJar()), javaClass.classLoader, GLBridgeTransformer()).apply {
+class Lwjgl3Loader(nativesDir: Path) {
+    private val loader = RelaunchClassLoader(arrayOf(findExtractedBundleJar()), javaClass.classLoader).apply {
         // Our API package is the only (non-standard) package that's excluded from the isolation
         addPackageExclusion("$PKG_API.")
         // Above was a lie, ModLauncher's findResource fails when the class is in another layer. Instead of trying to
@@ -45,8 +44,8 @@ class Lwjgl3Loader(nativesDir: Path, gl3: Lazy<Boolean>) {
         setResourceFilter { path -> path.endsWith(".sha1") }
         // Invoke the bootstrap code which sets up LWJGL's natives extraction code to look in a dedicated directory
         loadClass("$PKG_IMPL.Bootstrap")
-            .getMethod("init", Path::class.java, Lazy::class.java)
-            .invoke(null, nativesDir, gl3)
+            .getMethod("init", Path::class.java)
+            .invoke(null, nativesDir)
     }
 
     inline fun <reified T> get(): T = get(T::class.java)

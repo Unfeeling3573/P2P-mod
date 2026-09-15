@@ -19,6 +19,7 @@ import gg.essential.elementa.dsl.pixels
 import gg.essential.elementa.dsl.plus
 import gg.essential.elementa.dsl.width
 import gg.essential.elementa.font.FontProvider
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.elementa.state.BasicState
 import gg.essential.elementa.state.State
 import gg.essential.elementa.state.pixels
@@ -78,6 +79,77 @@ class EssentialUIText @JvmOverloads constructor(
         return constraints.getWidth()
     }
 
+    override fun extractComponent(extractor: ElementaExtractor) {
+        val textScale = getTextScale()
+        val constrainedWidth = constraints.getWidth()
+
+        val renderedTruncated: Boolean
+        if (truncateIfTooSmall && getTextWidth() * textScale > constrainedWidth) {
+            val fontProvider = getFontProvider()
+            val oldWidth = constraints.width
+            val oldX = constraints.x
+            val text = getText()
+            val line = text.split("\n").first().trim()
+            val suffix = "..."
+
+            fun truncate(endIndex: Int /* exclusive */): String {
+                return when {
+                    endIndex <= 0 -> suffix
+                    endIndex > line.lastIndex -> line + suffix
+                    else -> {
+                        // If this would split a color code in the middle, truncate the color char as well
+                        if (line[endIndex - 1] == ChatColor.COLOR_CHAR && line[endIndex].isValidFormatCode()) {
+                            return truncate(endIndex - 1)
+                        }
+                        line.substring(0, endIndex) + suffix
+                    }
+                }
+            }
+
+            var low = 0
+            var high = line.lastIndex
+            while (low <= high) {
+                val mid = (low + high).ushr(1)
+                val tooLong = truncate(mid).width(textScale, fontProvider) > constrainedWidth
+                if (tooLong) {
+                    high = mid - 1
+                } else {
+                    low = mid + 1
+                }
+            }
+            val truncated = truncate(low - 1)
+
+            // The truncated text can have a width that is slightly less than this component.
+            // This difference would ordinarily cause the text to render an incorrect scale,
+            // so we update the width of the component to exactly match the truncated text.
+            val truncatedWidth = truncated.width(textScale, fontProvider)
+            actualTextWidth.set(truncatedWidth)
+            setWidth(actualTextWidth.pixels())
+            setText(truncated)
+            if (centerTruncatedText) setX(oldX + ((constrainedWidth - truncatedWidth) / 2f).pixels)
+            super.extractComponent(extractor)
+            if (centerTruncatedText) setX(oldX)
+            setText(text)
+            setWidth(oldWidth)
+            renderedTruncated = true
+            fullText.set(text)
+        } else {
+            actualTextWidth.set(constraints.getWidth())
+            super.extractComponent(extractor)
+            renderedTruncated = false
+        }
+
+        if (mutableTruncatedState.getUntracked() != renderedTruncated) {
+            Window.enqueueRenderOperation {
+                mutableTruncatedState.set(renderedTruncated)
+            }
+        }
+    }
+
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
     override fun draw(matrixStack: UMatrixStack) {
         val textScale = getTextScale()
         val constrainedWidth = constraints.getWidth()
@@ -126,6 +198,7 @@ class EssentialUIText @JvmOverloads constructor(
             setWidth(actualTextWidth.pixels())
             setText(truncated)
             if (centerTruncatedText) setX(oldX + ((constrainedWidth - truncatedWidth) / 2f).pixels)
+            @Suppress("DEPRECATION")
             super.draw(matrixStack)
             if (centerTruncatedText) setX(oldX)
             setText(text)
@@ -134,6 +207,7 @@ class EssentialUIText @JvmOverloads constructor(
             fullText.set(text)
         } else {
             actualTextWidth.set(constraints.getWidth())
+            @Suppress("DEPRECATION")
             super.draw(matrixStack)
             renderedTruncated = false
         }

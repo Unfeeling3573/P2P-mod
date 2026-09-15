@@ -63,6 +63,8 @@ interface IntegratedServerManager {
      */
     val statusResponseJson: State<String?>
 
+    val isServerPublic: State<Boolean>
+
     /**
      * When the world was last played
      */

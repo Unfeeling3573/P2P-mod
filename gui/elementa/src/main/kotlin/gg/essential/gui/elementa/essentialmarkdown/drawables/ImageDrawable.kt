@@ -20,6 +20,7 @@ import gg.essential.elementa.constraints.resolution.ConstraintVisitor
 import gg.essential.elementa.dsl.childOf
 import gg.essential.elementa.dsl.pixels
 import gg.essential.elementa.dsl.toConstraint
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.elementa.essentialmarkdown.DrawState
 import gg.essential.gui.elementa.essentialmarkdown.EssentialMarkdown
 import gg.essential.gui.elementa.essentialmarkdown.selection.ImageCursor
@@ -62,6 +63,7 @@ class ImageDrawable(md: EssentialMarkdown, val url: URL, private val fallback: D
         } else fallback.layout(x, y, width)
     }
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
     override fun draw(matrixStack: UMatrixStack, state: DrawState) {
         if (!image.isLoaded) {
             fallback.drawCompat(matrixStack, state)
@@ -74,6 +76,21 @@ class ImageDrawable(md: EssentialMarkdown, val url: URL, private val fallback: D
             imageX.shift = state.xShift
             imageY.shift = state.yShift
             image.drawCompat(matrixStack)
+        }
+    }
+
+    override fun extract(extractor: ElementaExtractor, state: DrawState) {
+        if (!image.isLoaded) {
+            fallback.extract(extractor, state)
+        } else {
+            if (!hasLoaded) {
+                hasLoaded = true
+                md.layout()
+            }
+
+            imageX.shift = state.xShift
+            imageY.shift = state.yShift
+            image.extractComponent(extractor)
         }
     }
 

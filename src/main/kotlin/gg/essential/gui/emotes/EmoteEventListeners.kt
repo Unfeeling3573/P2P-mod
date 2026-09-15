@@ -92,7 +92,11 @@ class EmoteEventListeners {
             if ((triggers.movement && lastPosition != player.position && System.currentTimeMillis() - emoteActiveSince.second > triggers.movementGraceTime)
                 || (triggers.attack && lastAttacked != player.lastAttackedEntity)
                 || (triggers.damaged && hurtTime > 0)
+                //#if MC >= 26.3
+                //$$ || (triggers.armSwing && player.isSwinging)
+                //#else
                 || (triggers.armSwing && player.isSwingInProgress)
+                //#endif
             ) {
                 stopEmote()
             }

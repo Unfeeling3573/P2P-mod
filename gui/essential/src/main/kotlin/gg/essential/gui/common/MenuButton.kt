@@ -17,6 +17,8 @@ import gg.essential.elementa.components.Window
 import gg.essential.elementa.constraints.*
 import gg.essential.elementa.dsl.*
 import gg.essential.elementa.effects.OutlineEffect
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
 import gg.essential.elementa.state.BasicState
 import gg.essential.elementa.state.State
 import gg.essential.elementa.state.toConstraint
@@ -51,15 +53,15 @@ import gg.essential.util.UIdentifier
 import gg.essential.gui.util.hoveredState
 import gg.essential.util.image.bitmap.Bitmap
 import gg.essential.util.image.bitmap.bitmapState
-import gg.essential.util.image.bitmap.bitmapStateIf
 import gg.essential.util.image.bitmap.cropped
 import gg.essential.gui.util.pollingState
 import gg.essential.universal.render.UGpuSampler
 import gg.essential.universal.render.URenderPipeline
-import gg.essential.universal.vertex.UBufferBuilder
+import gg.essential.universal.vertex.UVertexConsumer
 import gg.essential.util.NEAREST
 import gg.essential.vigilance.utils.onLeftClick
 import java.awt.Color
+import kotlin.math.roundToInt
 
 /**
  * A styled button for use in various menus.
@@ -387,9 +389,19 @@ class MenuButton @JvmOverloads constructor(
         return text
     }
 
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
     override fun draw(matrixStack: UMatrixStack) {
+        @Suppress("DEPRECATION")
         beforeDraw(matrixStack)
+        extractComponent(ImmediateElementaExtractor(matrixStack))
+        @Suppress("DEPRECATION")
+        super.draw(matrixStack)
+    }
 
+    override fun extractComponent(extractor: ElementaExtractor) {
         val style = styleState.get()
         if (drawsBackground.getUntracked().getUntracked() && style.buttonColor.alpha != 0) {
             if (shouldBeRetextured ?: (Window.of(this).getTag<WindowSupportsButtonRetexturingMarker>() != null)) {
@@ -397,7 +409,7 @@ class MenuButton @JvmOverloads constructor(
                 val (type, texture) = ButtonTextures.currentTexture(hovered)
 
                 if (texture == null) {
-                    drawDefaultButton(matrixStack, style)
+                    extractDefaultButton(extractor, style)
                 } else {
                     // If the button is one of these states, we don't want to tint it unless the user has darkening
                     // enabled, which is handled in `drawTexturedButton`.
@@ -406,8 +418,8 @@ class MenuButton @JvmOverloads constructor(
                     // This check is mirrored in [MenuButtonProxy.requiresTinting()], be sure to replicate changes there
                     val isDefaultOrHoveredBaseColor = style.buttonColor == (if (hovered) GRAY else DARK_GRAY).buttonColor
 
-                    drawTexturedButton(
-                        matrixStack,
+                    extractTexturedButton(
+                        extractor,
                         getLeft().toDouble(),
                         getTop().toDouble(),
                         getRight().toDouble(),
@@ -419,16 +431,14 @@ class MenuButton @JvmOverloads constructor(
                     )
                 }
             } else {
-                drawDefaultButton(matrixStack, style)
+                extractDefaultButton(extractor, style)
             }
         }
-
-        super.draw(matrixStack)
     }
 
-    private fun drawDefaultButton(matrixStack: UMatrixStack, style: Style) {
-        drawButton(
-            matrixStack,
+    private fun extractDefaultButton(extractor: ElementaExtractor, style: Style) {
+        extractButton(
+            extractor,
             getLeft().toDouble() + 1.0,
             getTop().toDouble() + 1.0,
             getRight().toDouble() - 1.0,
@@ -453,7 +463,6 @@ class MenuButton @JvmOverloads constructor(
             UGraphics.CommonVertexFormats.POSITION_COLOR,
         ).apply {
             blendState = BlendState.ALPHA
-            depthTest = URenderPipeline.DepthTest.Always
         }.build()
 
         private val PIPELINE_TEXTURED = URenderPipeline.builderWithDefaultShader(
@@ -462,11 +471,10 @@ class MenuButton @JvmOverloads constructor(
             UGraphics.CommonVertexFormats.POSITION_TEXTURE_COLOR,
         ).apply {
             blendState = BlendState.ALPHA
-            depthTest = URenderPipeline.DepthTest.Always
         }.build()
 
-        fun drawButton(
-            matrixStack: UMatrixStack,
+        fun extractButton(
+            extractor: ElementaExtractor,
             left: Double,
             top: Double,
             right: Double,
@@ -480,42 +488,89 @@ class MenuButton @JvmOverloads constructor(
             hasLeft: Boolean,
             hasRight: Boolean,
         ) {
-            UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_COLOR).apply {
-                // Base
-                pos(matrixStack, left, top, 0.0).color(baseColor).endVertex()
-                pos(matrixStack, left, bottom, 0.0).color(baseColor).endVertex()
-                pos(matrixStack, right, bottom, 0.0).color(baseColor).endVertex()
-                pos(matrixStack, right, top, 0.0).color(baseColor).endVertex()
-
-                // Highlight left
-                pos(matrixStack, left, top, 0.0).color(highlightColor).endVertex()
-                pos(matrixStack, left, bottom, 0.0).color(highlightColor).endVertex()
-                pos(matrixStack, left + 1.0, bottom, 0.0).color(highlightColor).endVertex()
-                pos(matrixStack, left + 1.0, top, 0.0).color(highlightColor).endVertex()
-                // Highlight top
-                pos(matrixStack, left + 1.0, top, 0.0).color(highlightColor).endVertex()
-                pos(matrixStack, left + 1.0, top + 1.0, 0.0).color(highlightColor).endVertex()
-                pos(matrixStack, right, top + 1.0, 0.0).color(highlightColor).endVertex()
-                pos(matrixStack, right, top, 0.0).color(highlightColor).endVertex()
-
-                // Shadow right
-                pos(matrixStack, right, bottom, 0.0).color(shadowColor).endVertex()
-                pos(matrixStack, right, top, 0.0).color(shadowColor).endVertex()
-                pos(matrixStack, right - 1.0, top, 0.0).color(shadowColor).endVertex()
-                pos(matrixStack, right - 1.0, bottom, 0.0).color(shadowColor).endVertex()
-                // Shadow bottom
-                pos(matrixStack, right - 1.0, bottom, 0.0).color(shadowColor).endVertex()
-                pos(matrixStack, right - 1.0, bottom - 2.0, 0.0).color(shadowColor).endVertex()
-                pos(matrixStack, left, bottom - 2.0, 0.0).color(shadowColor).endVertex()
-                pos(matrixStack, left, bottom, 0.0).color(shadowColor).endVertex()
-
-                // Outline
-                drawOutline(matrixStack, left, top, right, bottom, outlineColor, hasTop, hasBottom, hasLeft, hasRight)
-            }.build()?.drawAndClose(PIPELINE)
+            extractButton(
+                extractor,
+                (left * extractor.guiScale).roundToInt(),
+                (top * extractor.guiScale).roundToInt(),
+                (right * extractor.guiScale).roundToInt(),
+                (bottom * extractor.guiScale).roundToInt(),
+                baseColor,
+                highlightColor,
+                shadowColor,
+                outlineColor,
+                if (hasTop) extractor.guiScale.roundToInt() else 0,
+                if (hasBottom) extractor.guiScale.roundToInt() else 0,
+                if (hasLeft) extractor.guiScale.roundToInt() else 0,
+                if (hasRight) extractor.guiScale.roundToInt() else 0,
+            )
         }
 
-        fun drawTexturedButton(
-            matrixStack: UMatrixStack,
+        private fun extractButton(
+            extractor: ElementaExtractor,
+            left: Int,
+            top: Int,
+            right: Int,
+            bottom: Int,
+            baseColor: Color,
+            highlightColor: Color,
+            shadowColor: Color,
+            outlineColor: Color,
+            topOutline: Int,
+            bottomOutline: Int,
+            leftOutline: Int,
+            rightOutline: Int,
+        ) {
+            val one = extractor.guiScale.roundToInt()
+            extractor.custom(
+                left - leftOutline,
+                top - topOutline,
+                right + rightOutline,
+                bottom + bottomOutline,
+                PIPELINE,
+                emptyList(),
+                9 * 4,
+            ) { builder, _, _ ->
+                val l = left.toDouble()
+                val t = top.toDouble()
+                val r = right.toDouble()
+                val b = bottom.toDouble()
+                val o = one.toDouble()
+
+                // Base
+                builder.pos(UMatrixStack.UNIT, l, t, 0.0).color(baseColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, l, b, 0.0).color(baseColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, r, b, 0.0).color(baseColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, r, t, 0.0).color(baseColor).endVertex()
+
+                // Highlight left
+                builder.pos(UMatrixStack.UNIT, l, t, 0.0).color(highlightColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, l, b, 0.0).color(highlightColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, l + o, b, 0.0).color(highlightColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, l + o, t, 0.0).color(highlightColor).endVertex()
+                // Highlight t
+                builder.pos(UMatrixStack.UNIT, l + o, t, 0.0).color(highlightColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, l + o, t + o, 0.0).color(highlightColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, r, t + o, 0.0).color(highlightColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, r, t, 0.0).color(highlightColor).endVertex()
+
+                // Shadow r
+                builder.pos(UMatrixStack.UNIT, r, b, 0.0).color(shadowColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, r, t, 0.0).color(shadowColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, r - o, t, 0.0).color(shadowColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, r - o, b, 0.0).color(shadowColor).endVertex()
+                // Shadow b
+                builder.pos(UMatrixStack.UNIT, r - o, b, 0.0).color(shadowColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, r - o, b - 2*o, 0.0).color(shadowColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, l, b - 2*o, 0.0).color(shadowColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, l, b, 0.0).color(shadowColor).endVertex()
+
+                // Outline
+                drawOutline(builder, l, t, r, b, outlineColor, topOutline.toDouble(), bottomOutline.toDouble(), leftOutline.toDouble(), rightOutline.toDouble())
+            }
+        }
+
+        fun extractTexturedButton(
+            extractor: ElementaExtractor,
             left: Double,
             top: Double,
             right: Double,
@@ -532,7 +587,16 @@ class MenuButton @JvmOverloads constructor(
             val textureView = texture.gpuTextureView
             UGraphics.color4f(1f, 1f, 1f, 1f)
 
-            UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_TEXTURE_COLOR).apply {
+            val guiScale = extractor.guiScale
+            extractor.custom(
+                (left * guiScale).roundToInt(),
+                (top * guiScale).roundToInt(),
+                (right * guiScale).roundToInt(),
+                (bottom * guiScale).roundToInt(),
+                PIPELINE_TEXTURED,
+                listOf(Pair(textureView, UGpuSampler.NEAREST)),
+                2 * 4,
+            ) { builder, _, _ ->
                 val width = right - left
                 val buttonMidPoint = left + (width / 2)
                 val textureMidpoint = (width / 2) / 200
@@ -555,22 +619,22 @@ class MenuButton @JvmOverloads constructor(
                     val buttonLeft = if (first) left else buttonMidPoint
                     val buttonRight = if (first) buttonMidPoint else right
 
-                    pos(matrixStack, buttonLeft, top, 0.0)
+                    builder.pos(UMatrixStack.UNIT, buttonLeft * guiScale, top * guiScale, 0.0)
                         .tex(textureLeft, textureTop)
                         .color(1f, 1f, 1f, 1f)
                         .endVertex()
 
-                    pos(matrixStack, buttonLeft, bottom, 0.0)
+                    builder.pos(UMatrixStack.UNIT, buttonLeft * guiScale, bottom * guiScale, 0.0)
                         .tex(textureLeft, textureBottom)
                         .color(1f, 1f, 1f, 1f)
                         .endVertex()
 
-                    pos(matrixStack, buttonRight, bottom, 0.0)
+                    builder.pos(UMatrixStack.UNIT, buttonRight * guiScale, bottom * guiScale, 0.0)
                         .tex(textureRight, textureBottom)
                         .color(1f, 1f, 1f, 1f)
                         .endVertex()
 
-                    pos(matrixStack, buttonRight, top, 0.0)
+                    builder.pos(UMatrixStack.UNIT, buttonRight * guiScale, top * guiScale, 0.0)
                         .tex(textureRight, textureTop)
                         .color(1f, 1f, 1f, 1f)
                         .endVertex()
@@ -579,46 +643,44 @@ class MenuButton @JvmOverloads constructor(
                 // We draw the texture in two halves, just like the vanilla button
                 drawHalf(true)
                 drawHalf(false)
-            }.build()?.drawAndClose(PIPELINE_TEXTURED) {
-                texture(0, textureView, UGpuSampler.NEAREST)
             }
         }
 
-        private fun UBufferBuilder.drawOutline(
-            matrixStack: UMatrixStack,
+        private fun drawOutline(
+            builder: UVertexConsumer,
             left: Double,
             top: Double,
             right: Double,
             bottom: Double,
             outlineColor: Color,
-            hasTop: Boolean,
-            hasBottom: Boolean,
-            hasLeft: Boolean,
-            hasRight: Boolean,
+            topOutline: Double,
+            bottomOutline: Double,
+            leftOutline: Double,
+            rightOutline: Double,
         ) {
-            if (hasTop) {
-                pos(matrixStack, left - if (hasLeft) 1.0 else 0.0, top - 1.0, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, left - if (hasLeft) 1.0 else 0.0, top, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, right + if (hasRight) 1.0 else 0.0, top, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, right + if (hasRight) 1.0 else 0.0, top - 1.0, 0.0).color(outlineColor).endVertex()
+            if (topOutline > 0) {
+                builder.pos(UMatrixStack.UNIT, left - leftOutline, top - topOutline, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, left - leftOutline, top, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, right + rightOutline, top, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, right + rightOutline, top - topOutline, 0.0).color(outlineColor).endVertex()
             }
-            if (hasBottom) {
-                pos(matrixStack, left - if (hasLeft) 1.0 else 0.0, bottom, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, left - if (hasLeft) 1.0 else 0.0, bottom + 1.0, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, right + if (hasRight) 1.0 else 0.0, bottom + 1.0, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, right + if (hasRight) 1.0 else 0.0, bottom, 0.0).color(outlineColor).endVertex()
+            if (bottomOutline > 0) {
+                builder.pos(UMatrixStack.UNIT, left - leftOutline, bottom, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, left - leftOutline, bottom + bottomOutline, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, right + rightOutline, bottom + bottomOutline, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, right + rightOutline, bottom, 0.0).color(outlineColor).endVertex()
             }
-            if (hasLeft) {
-                pos(matrixStack, left - 1.0, top, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, left - 1.0, bottom, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, left, bottom, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, left, top, 0.0).color(outlineColor).endVertex()
+            if (leftOutline > 0) {
+                builder.pos(UMatrixStack.UNIT, left - leftOutline, top, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, left - leftOutline, bottom, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, left, bottom, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, left, top, 0.0).color(outlineColor).endVertex()
             }
-            if (hasRight) {
-                pos(matrixStack, right, top, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, right, bottom, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, right + 1.0, bottom, 0.0).color(outlineColor).endVertex()
-                pos(matrixStack, right + 1.0, top, 0.0).color(outlineColor).endVertex()
+            if (rightOutline > 0) {
+                builder.pos(UMatrixStack.UNIT, right, top, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, right, bottom, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, right + rightOutline, bottom, 0.0).color(outlineColor).endVertex()
+                builder.pos(UMatrixStack.UNIT, right + rightOutline, top, 0.0).color(outlineColor).endVertex()
             }
         }
 
@@ -722,21 +784,21 @@ class MenuButton @JvmOverloads constructor(
 
         private val vanillaWidgetsTexture =
             UIdentifier("minecraft", "textures/gui/widgets.png")
-                .bitmapStateIf(platform.config.useVanillaButtonForRetexturing)
+                .bitmapState()
 
         /**
          * This is only on 1.20.2+ where the pack format is 16+, older versions will use [vanillaWidgetsTexture].
          */
         private val vanillaButtonSpriteTexture =
             UIdentifier("minecraft", "textures/gui/sprites/widget/button.png")
-                .bitmapStateIf(platform.config.useVanillaButtonForRetexturing)
+                .bitmapState()
 
         /**
          * This is only on 1.20.2+ where the pack format is 16+, older versions will use [vanillaWidgetsTexture].
          */
         private val vanillaHighlightedButtonSpriteTexture =
             UIdentifier("minecraft", "textures/gui/sprites/widget/button_highlighted.png")
-                .bitmapStateIf(platform.config.useVanillaButtonForRetexturing)
+                .bitmapState()
 
         private val essentialDefaultButtonTexture = essentialButtonTexture.map {
             val image = it ?: return@map null

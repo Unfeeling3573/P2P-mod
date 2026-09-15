@@ -39,8 +39,12 @@ import com.mojang.authlib.minecraft.InsecureTextureException;
 
 //#if MC>=11900
 //$$ import com.mojang.authlib.yggdrasil.ServicesKeyInfo;
+//#if MC >= 26.3
+//$$ import com.mojang.authlib.services.MinecraftServicesSessionService;
+//$$ import net.minecraft.server.Services;
+//#else
 //$$ import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
-//$$ import sun.misc.Unsafe;
+//#endif
 //$$
 //$$ import java.lang.reflect.Field;
 //$$ import java.security.Signature;
@@ -246,28 +250,37 @@ public class GameProfileManager implements SubscriptionManager.Listener {
     //#endif
 
     //#if MC>=11900
-    //$$ public static void register(YggdrasilAuthenticationService authenticationService) throws ReflectiveOperationException {
-    //$$     Field theUnsafeField = Unsafe.class.getDeclaredField("theUnsafe");
-    //$$     theUnsafeField.setAccessible(true);
-    //$$     Unsafe unsafe = (Unsafe) theUnsafeField.get(null);
-    //$$
+    //$$ public static void register(
+        //#if MC >= 26.3
+        //$$ Services services
+        //#else
+        //$$ YggdrasilAuthenticationService authenticationService
+        //#endif
+    //$$ ) throws ReflectiveOperationException {
+        //#if MC >= 26.3
+        //$$ MinecraftServicesSessionService authenticationService = (MinecraftServicesSessionService) services.sessionService();
+        //#endif
         //#if MC>=12000
+        //#if MC >= 26.3
+        //$$ Field servicesKeySetField = MinecraftServicesSessionService.class.getDeclaredField("servicesKeySet");
+        //#else
         //$$ Field servicesKeySetField = YggdrasilAuthenticationService.class.getDeclaredField("servicesKeySet");
-        //$$ long servicesKeySetOffset = unsafe.objectFieldOffset(servicesKeySetField);
-        //$$ ServicesKeySet originalSet = (ServicesKeySet) unsafe.getObject(authenticationService, servicesKeySetOffset);
+        //#endif
+        //$$ servicesKeySetField.setAccessible(true);
+        //$$ ServicesKeySet originalSet = (ServicesKeySet) servicesKeySetField.get(authenticationService);
         //$$ ServicesKeySet wrapperSet = (type) -> {
         //$$     if (type != ServicesKeyType.PROFILE_PROPERTY) {
         //$$         return originalSet.keys(type);
         //$$     }
         //$$     return originalSet.keys(type).stream().map(TrustingServicesKeyInfo::new).collect(Collectors.toList());
         //$$ };
-        //$$ unsafe.putObject(authenticationService, servicesKeySetOffset, wrapperSet);
+        //$$ servicesKeySetField.set(authenticationService, wrapperSet);
         //#else
         //$$ Field servicesKeyField = YggdrasilAuthenticationService.class.getDeclaredField("servicesKey");
-        //$$ long servicesKeyOffset = unsafe.objectFieldOffset(servicesKeyField);
-        //$$ ServicesKeyInfo originalKey = (ServicesKeyInfo) unsafe.getObject(authenticationService, servicesKeyOffset);
+        //$$ servicesKeyField.setAccessible(true);
+        //$$ ServicesKeyInfo originalKey = (ServicesKeyInfo) servicesKeyField.get(authenticationService);
         //$$ ServicesKeyInfo wrapperKey = new TrustingServicesKeyInfo(originalKey);
-        //$$ unsafe.putObject(authenticationService, servicesKeyOffset, wrapperKey);
+        //$$ servicesKeyField.set(authenticationService, wrapperKey);
         //#endif
     //$$ }
     //$$

@@ -11,6 +11,7 @@
  */
 package gg.essential.gui.elementa.essentialmarkdown.selection
 
+import gg.essential.elementa.renderer.ElementaExtractor
 import gg.essential.gui.elementa.essentialmarkdown.DrawState
 import gg.essential.gui.elementa.essentialmarkdown.drawables.Drawable
 import gg.essential.gui.elementa.essentialmarkdown.drawables.ImageDrawable
@@ -64,11 +65,19 @@ class Selection private constructor(val start: Cursor<*>, val end: Cursor<*>) {
     }
 
     @Deprecated(UMatrixStack.Compat.DEPRECATED, ReplaceWith("draw(matrixStack, state)"))
+    @Suppress("DEPRECATION")
     fun draw(state: DrawState) = draw(UMatrixStack(), state)
 
+    @Deprecated("`draw`-style rendering is deprecated. Use `extract` instead.")
+    @Suppress("DEPRECATION")
     fun draw(matrixStack: UMatrixStack, state: DrawState) {
         start.draw(matrixStack, state)
         end.draw(matrixStack, state)
+    }
+
+    fun extract(extractor: ElementaExtractor, state: DrawState) {
+        start.extract(extractor, state)
+        end.extract(extractor, state)
     }
 
     fun remove() {

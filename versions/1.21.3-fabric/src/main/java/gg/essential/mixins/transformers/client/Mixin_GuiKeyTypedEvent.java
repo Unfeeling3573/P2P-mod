@@ -50,8 +50,8 @@ public class Mixin_GuiKeyTypedEvent {
     //#endif
 
     @Unique
-    private static void keyTyped(Screen screen, char typedChar, int keyCode, CallbackInfo ci) {
-        GuiKeyTypedEvent event = new GuiKeyTypedEvent(screen, typedChar, keyCode);
+    private static void keyTyped(Screen screen, char typedChar, int keyCode, int scancode, CallbackInfo ci) {
+        GuiKeyTypedEvent event = new GuiKeyTypedEvent(screen, typedChar, keyCode, scancode);
         Essential.EVENT_BUS.post(event);
         if (event.isCancelled()) {
             ci.cancel();
@@ -66,13 +66,18 @@ public class Mixin_GuiKeyTypedEvent {
         //#if MC>=12109
         //$$ @Local(ordinal = 0, argsOnly = true) KeyInput keyInput
         //#else
-        @Local(ordinal = 0, argsOnly = true) int key
+        @Local(ordinal = 0, argsOnly = true) int key,
+        @Local(ordinal = 1, argsOnly = true) int scancode
         //#endif
     ) {
-        //#if MC>=12109
+        //#if MC >= 26.3
+        //$$ int key = keyInput.keycode();
+        //$$ int scancode = keyInput.key();
+        //#elseif MC >= 1.21.9
         //$$ int key = keyInput.key();
+        //$$ int scancode = keyInput.scancode();
         //#endif
-        keyTyped(screen, '\0', key, ci);
+        keyTyped(screen, '\0', key, scancode, ci);
     }
 
     @Group(name = "onCharTyped")
@@ -90,10 +95,10 @@ public class Mixin_GuiKeyTypedEvent {
         //$$ int codePoint = charInput.codepoint();
         //#endif
         if (Character.isBmpCodePoint(codePoint)) {
-            keyTyped(screen, (char) codePoint, 0, ci);
+            keyTyped(screen, (char) codePoint, 0, -1, ci);
         } else if (Character.isValidCodePoint(codePoint)) {
-            keyTyped(screen, Character.highSurrogate(codePoint), 0, ci);
-            keyTyped(screen, Character.lowSurrogate(codePoint), 0, ci);
+            keyTyped(screen, Character.highSurrogate(codePoint), 0, -1, ci);
+            keyTyped(screen, Character.lowSurrogate(codePoint), 0, -1, ci);
         }
     }
 
@@ -108,11 +113,17 @@ public class Mixin_GuiKeyTypedEvent {
     //$$ @Inject(method = "keyPress", at = @At(value = "FIELD", target = OPTIFINE_ONSCREENKEYPRESSED, ordinal = 1, remap = false), cancellable = true)
     //#if MC>=12109
     //$$ private void optifineKeyPressed(CallbackInfo ci, @Local(ordinal = 0) Screen screen, @Local(ordinal = 0, argsOnly = true) KeyInput keyInput) {
-    //$$     int key = keyInput.key();
+        //#if MC >= 26.3
+        //$$ int key = keyInput.keycode();
+        //$$ int scancode = keyInput.key();
+        //#else
+        //$$ int key = keyInput.key();
+        //$$ int scancode = keyInput.scancode();
+        //#endif
     //#else
-    //$$ private void optifineKeyPressed(CallbackInfo ci, @Local(ordinal = 0) Screen screen, @Local(ordinal = 0, argsOnly = true) int key) {
+    //$$ private void optifineKeyPressed(CallbackInfo ci, @Local(ordinal = 0) Screen screen, @Local(ordinal = 0, argsOnly = true) int key, @Local(ordinal = 1, argsOnly = true) int scancode) {
     //#endif
-    //$$     keyTyped(screen, '\0', key, ci);
+    //$$     keyTyped(screen, '\0', key, scancode, ci);
     //$$ }
     //$$
     //$$ @Group(name = "onCharTyped")
@@ -125,10 +136,10 @@ public class Mixin_GuiKeyTypedEvent {
     //$$ private void optifineCharTyped(CallbackInfo ci, @Local(ordinal = 0) Screen screen, @Local(ordinal = 0, argsOnly = true) int codePoint) {
     //#endif
     //$$     if (Character.isBmpCodePoint(codePoint)) {
-    //$$         keyTyped(screen, (char) codePoint, 0, ci);
+    //$$         keyTyped(screen, (char) codePoint, 0, -1, ci);
     //$$     } else if (Character.isValidCodePoint(codePoint)) {
-    //$$         keyTyped(screen, Character.highSurrogate(codePoint), 0, ci);
-    //$$         keyTyped(screen, Character.lowSurrogate(codePoint), 0, ci);
+    //$$         keyTyped(screen, Character.highSurrogate(codePoint), 0, -1, ci);
+    //$$         keyTyped(screen, Character.lowSurrogate(codePoint), 0, -1, ci);
     //$$     }
     //$$ }
     //#endif

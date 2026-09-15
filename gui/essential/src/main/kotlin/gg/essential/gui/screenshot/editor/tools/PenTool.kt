@@ -19,18 +19,22 @@ import dev.folomeev.kotgl.matrix.vectors.mutables.normalize
 import dev.folomeev.kotgl.matrix.vectors.mutables.plus
 import dev.folomeev.kotgl.matrix.vectors.mutables.times
 import dev.folomeev.kotgl.matrix.vectors.vec2
-import gg.essential.elementa.components.UIBlock
+import gg.essential.elementa.renderer.SpecialRenderer
 import gg.essential.gui.screenshot.editor.ScreenshotCanvas
 import gg.essential.gui.screenshot.editor.change.EditHistory
 import gg.essential.gui.screenshot.editor.change.VectorStroke
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
-import gg.essential.universal.UResolution
+import gg.essential.universal.render.UGpuBuffer
+import gg.essential.universal.render.UGpuTextureView
+import gg.essential.universal.render.URenderPassDescriptor
 import gg.essential.universal.shader.BlendState
+import gg.essential.universal.vertex.UVertexConsumer
 import gg.essential.util.GuiEssentialPlatform.Companion.platform
 import org.intellij.lang.annotations.Language
 import java.awt.Color
 import kotlin.math.abs
+import kotlin.use
 
 /**
  * This tool works by storing points of where the cursor has been dragged on the canvas
@@ -95,10 +99,97 @@ class PenTool(private val editHistory: EditHistory, editableScreenshot: Screensh
     inner class PenVectorStroke(val colorObj: Color, val strokeWidth: Float) :
         VectorStroke(editableScreenshot, colorObj.rgb) {
         val list = mutableListOf<Pair<Float, Float>>()
+    }
 
-        override fun render(matrixStack: UMatrixStack, imageX: Float, imageY: Float, imageWidth: Float, imageHeight: Float, scale: Float) {
-            if (list.size < 2) return
+    class RenderState(
+        val scale: Float,
+        val strokes: List<Stroke>,
+    ) {
+        class Stroke(
+            val points: List<Vec2>,
+            val strokeWidth: Float,
+            val color: Color,
+        )
 
+        companion object {
+            fun create(
+                guiScale: Float,
+                imageWidth: Float,
+                imageHeight: Float,
+                scale: Float,
+                strokes: List<PenVectorStroke>,
+            ): RenderState {
+                return RenderState(
+                    scale,
+                    strokes.mapNotNull { stroke ->
+                        if (stroke.list.size < 2) return@mapNotNull null
+
+                        Stroke(
+                            // Convert list to Vec2 points in screen space (0/0 is top left; unit is real pixels)
+                            stroke.list.map { (x, y) -> vec2(x * imageWidth * guiScale, y * imageHeight * guiScale) },
+                            stroke.strokeWidth,
+                            stroke.colorObj,
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    object RendererFactory : SpecialRenderer.Factory<RenderState> {
+        override fun create(): SpecialRenderer<RenderState> =
+            Renderer()
+    }
+
+    private class Renderer : SpecialRenderer<RenderState> {
+        override val supportsScissor: Boolean
+            get() = false // we could, but there'll only ever be one of these anyway, so doesn't really matter
+        override val onlyDrawsInBounds: Boolean
+            get() = false
+
+        override fun close() {
+        }
+
+        override fun render(destination: UGpuTextureView, instances: List<SpecialRenderer.Instance<RenderState>>) {
+            val device = UGraphics.getDevice()
+
+            device.createRenderPass(
+                URenderPassDescriptor { "PenTool" }
+                    .withColorAttachment(destination)
+            ).use { renderPass ->
+                renderPass.pipeline(PIPELINE)
+
+                for (instance in instances) {
+                    val w = destination.texture.width
+                    val h = destination.texture.height
+                    val x = instance.dstX
+                    val y = instance.dstY
+                    renderPass.projectionMatrix(floatArrayOf(
+                        2f/w, 0f,    0f,   0f,
+                        0f,   -2f/h, 0f,   0f,
+                        0f,   0f,    1f,   0f,
+                        -1f + x * 2f/w,  1f - y * 2f/h,    0f,   1f,
+                    ))
+
+                    val state = instance.args
+                    for (stroke in state.strokes) {
+                        val builder = platform.newPenToolBufferBuilder(UGraphics.DrawMode.TRIANGLES)
+                        val vertexCount = render(builder, state, stroke)
+                        builder.build()!!.use { device.createBuffer(UGpuBuffer.Usage.VERTEX, it.toByteBuffer()) }.use { vertexBuffer ->
+                            renderPass.uniform("uThickness", stroke.strokeWidth * state.scale)
+                            renderPass.vertexBuffer(0, vertexBuffer.slice())
+                            renderPass.draw(vertexCount)
+                        }
+                    }
+                }
+            }
+        }
+
+        private fun render(
+            builder: UVertexConsumer,
+            state: RenderState,
+            strokeState: RenderState.Stroke,
+        ): Int {
             fun Vec2.rotate90CW() = vec2(-y, x)
             fun Vec2.rotate90CCW() = vec2(y, -x)
 
@@ -116,17 +207,10 @@ class PenTool(private val editHistory: EditHistory, editableScreenshot: Screensh
                 }
             }
 
-            // For simplicity, we'll do all our math and shading in pixel space, so we'll undo MC's gui scaling for the
-            // duration of this method
-            // Note: This also slightly improves accuracy, because we must cast some of our points to integers to pass
-            //       them to our shader. See the "float32" note in the [vertex] function below.
-            val guiScale = UResolution.scaleFactor.toFloat()
-            val guiScaleInverse = 1 / guiScale
-            matrixStack.push()
-            matrixStack.scale(guiScaleInverse, guiScaleInverse, 1f)
-
-            // Convert list to Vec2 points in screen space (0/0 is top left; unit is real pixels)
-            val points = list.map { (x, y) -> vec2((imageX + x * imageWidth) * guiScale, (imageY + y * imageHeight) * guiScale) }
+            val points = strokeState.points
+            val strokeWidth = strokeState.strokeWidth
+            val colorObj = strokeState.color
+            val scale = state.scale
 
             // To smooth out the pen strokes, instead of just drawing a linear line between each segment (pair of
             // points), we'll draw a quadratic bezier curve.
@@ -215,18 +299,14 @@ class PenTool(private val editHistory: EditHistory, editableScreenshot: Screensh
                 Pair(p1, p2)
             }
 
-            val builder = platform.newPenToolBufferBuilder(UGraphics.DrawMode.TRIANGLES)
+            var vertexCount = 0
             for (i in segments) {
                 val p1 = points[i]
                 val p2 = points[i + 1]
                 val c = controls[i]
 
                 fun vertex(pos: Vec2) {
-                    // Note: We assume that the matrix stack only changes the Z coordinate. We use the x/y position to
-                    //       derive vPos in the shader, so they mustn't be modified by the matrix stack.
-                    // Note: We cannot just use the UNIT matrix stack, a Z offset is required on 1.21.6 and above,
-                    //       otherwise the triangle will be clipped by the near plane.
-                    builder.pos(matrixStack, pos.x.toDouble(), pos.y.toDouble(), 0.0)
+                    builder.pos(UMatrixStack.UNIT, pos.x.toDouble(), pos.y.toDouble(), 0.0)
                     builder.color(colorObj)
                     // Note: tex uses float32 while overlay and light use int16 component types.
                     //       To avoid the same point having different precision for different curves (the p2 of this
@@ -236,6 +316,7 @@ class PenTool(private val editHistory: EditHistory, editableScreenshot: Screensh
                     builder.overlay(p1.x.toInt(), p1.y.toInt())
                     builder.light(p2.x.toInt(), p2.y.toInt())
                     builder.endVertex()
+                    vertexCount++
                 }
                 fun tri(a: Vec2, b: Vec2, c: Vec2) {
                     vertex(a)
@@ -292,24 +373,7 @@ class PenTool(private val editHistory: EditHistory, editableScreenshot: Screensh
                     tri(r3, l3, l2)
                 }
             }
-            builder.build()?.drawAndClose(PIPELINE) {
-                uniform("uThickness", scaledStrokeWidth)
-                uniform("uGuiScale", guiScale)
-            }
-
-            // Helpful debugging code
-            // Draws all points (green) and computed control point (green)
-            if (false) {
-                val s = 1
-                for ((x, y) in points) {
-                    UIBlock.drawBlock(matrixStack, Color.GREEN, x.toDouble() - s, y.toDouble() - s, x.toDouble() + s, y.toDouble() + s)
-                }
-                for ((x, y) in controls) {
-                    UIBlock.drawBlock(matrixStack, Color.BLUE, x.toDouble() - s, y.toDouble() - s, x.toDouble() + s, y.toDouble() + s)
-                }
-            }
-
-            matrixStack.pop()
+            return vertexCount
         }
     }
 
@@ -322,12 +386,10 @@ class PenTool(private val editHistory: EditHistory, editableScreenshot: Screensh
             varying vec2 vP2;
             varying vec2 vC;
             
-            uniform float uGuiScale;
-            
             void main() {
                 gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * gl_Vertex;
                 vColor = gl_Color;
-                vPos = gl_Vertex.xy * uGuiScale;
+                vPos = gl_Vertex.xy;
                 vC = gl_MultiTexCoord0.st;
                 vP1 = vec2(gl_MultiTexCoord1.st);
                 vP2 = vec2(gl_MultiTexCoord2.st);

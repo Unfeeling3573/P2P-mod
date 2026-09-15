@@ -18,6 +18,9 @@ import gg.essential.elementa.components.Window
 import gg.essential.elementa.constraints.*
 import gg.essential.elementa.dsl.*
 import gg.essential.elementa.effects.ScissorEffect
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
+import gg.essential.elementa.renderer.SpecialRenderer
 import gg.essential.gui.EssentialPalette
 import gg.essential.gui.elementa.state.v2.State
 import gg.essential.gui.elementa.state.v2.memo
@@ -27,15 +30,15 @@ import gg.essential.gui.screenshot.RemoteScreenshot
 import gg.essential.gui.screenshot.ScreenshotId
 import gg.essential.gui.screenshot.editor.change.CropChange
 import gg.essential.gui.screenshot.editor.change.EditHistory
-import gg.essential.gui.screenshot.editor.change.VectorStroke
+import gg.essential.gui.screenshot.editor.tools.PenTool
 import gg.essential.gui.screenshot.image.ScreenshotImage
 import gg.essential.gui.screenshot.providers.RegisteredTexture
 import gg.essential.handlers.screenshot.ClientScreenshotMetadata
 import gg.essential.network.connectionmanager.media.IScreenshotManager
 import gg.essential.universal.UMatrixStack
 import gg.essential.universal.UResolution
-import gg.essential.util.GuiEssentialPlatform.Companion.platform
 import gg.essential.util.animateColor
+import gg.essential.util.image.GpuTexture
 import gg.essential.vigilance.gui.VigilancePalette
 import kotlinx.coroutines.Dispatchers
 import java.awt.image.BufferedImage
@@ -44,6 +47,7 @@ import java.io.IOException
 import java.util.concurrent.CompletableFuture
 import javax.imageio.ImageIO
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.math.roundToInt
 
 /**
  * Can be improved by abstracting cropping functions to a cropping [Tool] class
@@ -70,9 +74,19 @@ class ScreenshotCanvas(
             super.mouseMove(window)
         }
 
+        @Deprecated(
+            "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+            replaceWith = ReplaceWith("extract(extractor)")
+        )
         override fun draw(matrixStack: UMatrixStack) {
+            @Suppress("DEPRECATION")
             vectorEditingOverlay.draw(matrixStack)
+            @Suppress("DEPRECATION")
             super.draw(matrixStack)
+        }
+
+        override fun extractComponent(extractor: ElementaExtractor) {
+            vectorEditingOverlay.extractComponent(extractor)
         }
 
     }.onMouseClick { event ->
@@ -139,12 +153,28 @@ class ScreenshotCanvas(
         } childOf this
 
         val overlay = object : UIComponent() {
+            @Deprecated(
+                "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+                replaceWith = ReplaceWith("extract(extractor)")
+            )
             override fun draw(matrixStack: UMatrixStack) {
+                @Suppress("DEPRECATION")
                 beforeDraw(matrixStack)
-                editHistory.history.getUntracked().filterIsInstance<VectorStroke>().forEach { vs ->
-                    vs.render(matrixStack, getLeft(), getTop(), getWidth(), getHeight(), 1f)
-                }
+                extractComponent(ImmediateElementaExtractor(matrixStack))
+                @Suppress("DEPRECATION")
                 super.draw(matrixStack)
+            }
+            override fun extractComponent(extractor: ElementaExtractor) {
+                val strokes = editHistory.history.getUntracked().filterIsInstance<PenTool.PenVectorStroke>()
+                val guiScale = extractor.guiScale
+                extractor.special(
+                    (getLeft() * guiScale).roundToInt(),
+                    (getTop() * guiScale).roundToInt(),
+                    (getRight() * guiScale).roundToInt(),
+                    (getBottom() * guiScale).roundToInt(),
+                    PenTool.RendererFactory,
+                    PenTool.RenderState.create(guiScale, getWidth(), getHeight(), 1f, strokes),
+                )
             }
         }.constrain {
             width = 100.percent
@@ -182,15 +212,23 @@ class ScreenshotCanvas(
         val guiScale = UResolution.scaleFactor.toFloat()
         val fullWidth = screenshot.width
         val fullHeight = screenshot.height
-        val scaledFullWidth = fullWidth / guiScale
-        val scaledFullHeight = fullHeight / guiScale
-        val scale = scaledFullWidth / screenshotDisplay.getWidth()
+        val scale = fullWidth / (screenshotDisplay.getWidth() * guiScale)
 
-        val texture = platform.renderToTexture(fullWidth, fullHeight) { matrixStack ->
-            editHistory.history.getUntracked().filterIsInstance<VectorStroke>().forEach { vs ->
-                vs.render(matrixStack, 0f, 0f, scaledFullWidth, scaledFullHeight, scale)
-            }
-        }
+        val texture = GpuTexture(fullWidth, fullHeight, GpuTexture.Format.RGBA8)
+        texture.clearColor()
+        val renderer = PenTool.RendererFactory.create()
+        renderer.render(texture.ucView, listOf(SpecialRenderer.Instance(
+            0, 0, fullWidth, fullHeight,
+            0, 0, fullWidth, fullHeight,
+            PenTool.RenderState.create(
+                1f,
+                fullWidth.toFloat(),
+                fullHeight.toFloat(),
+                scale,
+                editHistory.history.getUntracked().filterIsInstance<PenTool.PenVectorStroke>(),
+            )
+        )))
+        renderer.close()
         val buffer = texture.readPixelColors(0, 0, fullWidth, fullHeight)
         texture.close()
         // Fork as soon as we can to avoid freezing the main thread

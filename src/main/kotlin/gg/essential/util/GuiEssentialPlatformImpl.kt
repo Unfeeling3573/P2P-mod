@@ -22,8 +22,10 @@ import gg.essential.config.EssentialConfig
 import gg.essential.connectionmanager.common.packet.telemetry.ClientTelemetryPacket
 import gg.essential.cosmetics.EquippedCosmetic
 import gg.essential.elementa.components.Window
+import gg.essential.elementa.renderer.SpecialRenderer
 import gg.essential.event.client.ReAuthEvent
 import gg.essential.gui.common.EmulatedUI3DPlayer
+import gg.essential.gui.common.UI3DPlayerSpecialRenderer
 import gg.essential.gui.common.UIPlayer
 import gg.essential.gui.common.modal.Modal
 import gg.essential.gui.elementa.essentialmarkdown.EssentialMarkdown
@@ -57,6 +59,7 @@ import gg.essential.gui.screenshot.components.ScreenshotBrowser
 import gg.essential.gui.screenshot.providers.MinecraftWindowedTextureProvider
 import gg.essential.gui.screenshot.providers.WindowedImageProvider
 import gg.essential.gui.screenshot.providers.WindowedTextureProvider
+import gg.essential.gui.sps.InviteFriendsModal
 import gg.essential.gui.wardrobe.ItemId
 import gg.essential.gui.wardrobe.Wardrobe
 import gg.essential.gui.wardrobe.WardrobeCategory
@@ -73,6 +76,7 @@ import gg.essential.model.backend.RenderBackend
 import gg.essential.model.backend.minecraft.MinecraftRenderBackend
 import gg.essential.model.util.Color
 import gg.essential.network.CMConnection
+import gg.essential.network.connectionmanager.coins.CoinsManager
 import gg.essential.network.connectionmanager.cosmetics.AssetLoader
 import gg.essential.network.connectionmanager.cosmetics.ICosmeticsManager
 import gg.essential.network.connectionmanager.cosmetics.ModelLoader
@@ -83,16 +87,19 @@ import gg.essential.network.connectionmanager.notices.INoticesManager
 import gg.essential.network.connectionmanager.skins.SkinsManager
 import gg.essential.network.connectionmanager.social.ProfileSuspension
 import gg.essential.network.connectionmanager.social.RulesManager
+import gg.essential.network.connectionmanager.sps.SPSSessionSource
 import gg.essential.network.connectionmanager.suspension.SuspensionManager
+import gg.essential.sps.GameModLoader
+import gg.essential.sps.LocalResourcePackIndex
 import gg.essential.sps.SpsAddress
+import gg.essential.sps.WorldsManager
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UImage
-import gg.essential.universal.UMatrixStack
 import gg.essential.universal.UMinecraft
-import gg.essential.universal.UResolution
 import gg.essential.universal.UScreen
 import gg.essential.universal.USound
 import gg.essential.universal.render.UGpuFormat
+import gg.essential.universal.render.UGpuTextureView
 import gg.essential.universal.render.URenderPipeline
 import gg.essential.universal.utils.ReleasedDynamicTexture
 import gg.essential.universal.vertex.UBufferBuilder
@@ -106,11 +113,8 @@ import io.netty.buffer.ByteBuf
 import kotlinx.coroutines.CoroutineDispatcher
 import me.kbrewster.eventbus.Subscribe
 import net.minecraft.client.Minecraft
-import net.minecraft.client.renderer.GlStateManager
+import net.minecraft.client.gui.GuiCreateWorld
 import net.minecraft.client.renderer.vertex.VertexFormat
-import org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA
-import org.lwjgl.opengl.GL11.GL_SRC_ALPHA
-import org.lwjgl.opengl.GL13.GL_TEXTURE0
 import java.awt.image.BufferedImage
 import java.io.IOException
 import java.io.InputStream
@@ -128,32 +132,19 @@ import net.minecraft.client.renderer.vertex.DefaultVertexFormats
 import net.minecraft.client.renderer.vertex.VertexFormatElement
 //#endif
 
+//#if MC >= 1.21.6
+//$$ import com.mojang.blaze3d.systems.RenderSystem
+//#endif
+
 //#if MC>=12105
 //$$ import net.minecraft.client.texture.GlTexture
 //$$ import com.mojang.blaze3d.opengl.GlStateManager
-//#endif
-
-//#if MC == 1.21.5
-//$$ import gg.essential.mixins.impl.client.MinecraftExt
-//$$ import net.minecraft.client.gl.Framebuffer;
-//#endif
-
-//#if MC >= 1.21.2
-//$$ import com.mojang.blaze3d.systems.ProjectionType
-//#elseif MC >= 1.20
-//$$ import com.mojang.blaze3d.systems.VertexSorter
 //#endif
 
 //#if MC>=11200
 import net.minecraft.init.SoundEvents
 //#else
 //$$ import net.minecraft.util.ResourceLocation
-//#endif
-
-//#if MC >= 1.17
-//$$ import net.minecraft.util.math.Matrix4f
-//#else
-import org.lwjgl.opengl.GL11
 //#endif
 
 @AccessedViaReflection("GuiEssentialPlatform")
@@ -299,16 +290,27 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
         //$$ get() = "1.8.9"
         //#endif
 
+    override val mcModLoader: GameModLoader
+        get() {
+            //#if FABRIC
+            //$$ return GameModLoader.Fabric
+            //#elseif NEOFORGE
+            //$$ return GameModLoader.NeoForge
+            //#elseif FORGE
+            return GameModLoader.Forge
+            //#endif
+        }
+
     override val localModList: Map<String, String>
         get() = ModLoaderUtil.getMods().associate { it.name to it.version }
 
     override fun currentServerType(): ServerType? {
         val minecraft = Minecraft.getMinecraft()
 
-        val spsManager = Essential.getInstance().connectionManager.spsManager
-        val localSpsSession = spsManager.localSession
-        if (localSpsSession != null) {
-            return ServerType.SPS.Host(localSpsSession.hostUUID)
+        val worldManager = Essential.getInstance().worldsManager.integratedServerWorld.getUntracked()
+        val host = worldManager?.host?.getUntracked()
+        if (host != null) {
+            return ServerType.SPS.Host(host)
         }
 
         if (minecraft.isSingleplayer) {
@@ -363,7 +365,7 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
     }
 
     override fun haveActiveRemoteSpsSession(host: UUID): Boolean {
-        return Essential.getInstance().connectionManager.spsManager.getRemoteSession(host) != null
+        return Essential.getInstance().worldsManager.remoteSpsSessions.getUntracked().any { it.hostUUID == host }
     }
 
     override val essentialUriListener: EssentialMarkdown.(EssentialMarkdown.LinkClickEvent) -> Unit
@@ -381,8 +383,14 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
     override val cosmeticsManager: ICosmeticsManager
         get() = Essential.getInstance().connectionManager.cosmeticsManager
 
+    override val coinsManager: CoinsManager
+        get() = Essential.getInstance().connectionManager.coinsManager
+
     override val wardrobeSettings: WardrobeSettings
         get() = Essential.getInstance().connectionManager.cosmeticsManager.wardrobeSettings
+
+    override val localResourcePackIndex: LocalResourcePackIndex
+        get() = Essential.getInstance().mcLocalResourcePackIndex
 
     override val mojangSkinManager: MojangSkinManager
         get() = Essential.getInstance().skinManager
@@ -392,6 +400,9 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
 
     override val disabledFeaturesManager: DisabledFeaturesManager
         get() = Essential.getInstance().connectionManager.disabledFeaturesManager
+
+    override val worldsManager: WorldsManager
+        get() = Essential.getInstance().worldsManager
 
     override val screenshotFolder: Path
         get() = gg.essential.util.screenshotFolder.toPath()
@@ -424,6 +435,9 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
 
     override fun newGpuTexture(width: Int, height: Int, format: GpuTexture.Format): GpuTexture =
         OwnedGpuTextureImpl(width, height, format)
+
+    override fun wrapGpuTexture(format: GpuTexture.Format, uGpuTextureView: UGpuTextureView): GpuTexture =
+        UnownedGpuTextureImpl(format, uGpuTextureView)
 
     override val mcFrameBufferColorTexture: GpuTexture
         get() {
@@ -475,7 +489,7 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
         get() = null
         //#endif
 
-    //#if MC>=12106
+    //#if MC >= 1.21.6 && MC < 26.3
     //$$ override val outputColorTextureOverride: GpuTexture?
     //$$     get() = RenderSystem.outputColorTextureOverride?.let { tex ->
     //$$         UnownedGpuTextureImpl(GpuTexture.Format.RGBA8, UGraphics.getPlatformAdapter().textureView(tex))
@@ -508,6 +522,15 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
     override val isZZeroToOne: Boolean
         //#if MC >= 26.2
         //$$ get() = RenderSystem.getDevice().deviceInfo.isZZeroToOne
+        //#else
+        get() = false
+        //#endif
+
+    override val isMcLoadingOverlayOpen: Boolean
+        //#if MC >= 26.2
+        //$$ get() = Minecraft.getInstance().gui.overlay() != null
+        //#elseif MC>=11600
+        //$$ get() = Minecraft.getInstance().loadingGui != null
         //#else
         get() = false
         //#endif
@@ -548,7 +571,22 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
         return ui
     }
 
+    override fun renderUIPlayer(
+        color: UGpuTextureView,
+        depth: UGpuTextureView,
+        instance: SpecialRenderer.Instance<UIPlayer.RenderState>,
+    ) {
+        UI3DPlayerSpecialRenderer.render(color, depth, instance)
+    }
+
+    override fun overrideUIPlayerRenderTarget(color: UGpuTextureView, depth: UGpuTextureView) {
+        UI3DPlayerSpecialRenderer.overrideRenderTarget(color, depth)
+    }
+
     override fun shouldHideNotificationForHost(uuid: UUID): Boolean = DiscordIntegration.partyManager.shouldHideNotificationForHost(uuid)
+
+    override fun createServerInviteModal(modalManager: ModalManager): Modal =
+        InviteFriendsModal.showInviteModal(modalManager, source = SPSSessionSource.MAIN_MENU, onComplete = {})
 
     override fun openWardrobe(highlight: ItemId?) {
         val openedScreen = GuiUtil.openedScreen()
@@ -594,38 +632,31 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
         MinecraftUtils.connectToServer(name, address)
     }
 
+    override fun openCreateWorldScreen() {
+        //#if MC >= 1.21.9
+        //$$ val mc = MinecraftClient.getInstance()
+        //$$ val prevScreen = gg.essential.universal.UScreen.currentScreen
+        //$$ CreateWorldScreen.show(mc) { gg.essential.universal.UScreen.displayScreen(prevScreen) }
+        //#elseif MC >= 1.19
+        //$$ CreateWorldScreen.create(MinecraftClient.getInstance(), GuiUtil.openedScreen())
+        //#else
+        GuiUtil.openScreen {
+            //#if MC >= 1.16
+            //$$ CreateWorldScreen.func_243425_a(GuiUtil.openedScreen())
+            //#else
+            @Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS") // The parent screen can be nullable
+            GuiCreateWorld(GuiUtil.openedScreen())
+            //#endif
+        }
+        //#endif
+    }
+
     override fun shutdown() {
         MinecraftUtils.shutdown()
     }
 
     override val openEmoteWheelKeybind: GuiEssentialPlatform.Keybind
         get() = EssentialKeybindingRegistry.getInstance().openEmoteWheel
-
-    override fun restoreMcStateAfterNanoVGDrawCall() {
-        // NanoVG will have modified the GL state directly, so MC's state tracker are out of date and will potentially
-        // skip calls because they incorrectly see them to be redundant. To fix that, we explicitly tell MC what
-        // values may be set by NanoVG (and even if it did not set them, MC's state tracker will be back in sync).
-        //#if MC>=12105
-        //$$ GlStateManager._blendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        //#if MC >= 26.2
-        //$$ GlStateManager._enableBlend(0)
-        //#else
-        //$$ GlStateManager._enableBlend()
-        //#endif
-        //$$ GlStateManager._disableDepthTest()
-        //#else
-        @Suppress("DEPRECATION")
-        UGraphics.tryBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        @Suppress("DEPRECATION")
-        UGraphics.enableBlend()
-        @Suppress("DEPRECATION")
-        UGraphics.disableDepth()
-        //#endif
-        UGraphics.setActiveTexture(GL_TEXTURE0)
-        //#if MC>=11700 && MC<12105
-        //$$ net.minecraft.client.render.BufferRenderer.unbindAll()
-        //#endif
-    }
 
     override fun splitHostAndPort(address: String, defaultPort: Int): Pair<String, Int> {
         val hostAndPort = HostAndPort.fromString(address)
@@ -717,96 +748,6 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
 
     override fun newPenToolRenderPipelineBuilder(id: String, drawMode: UGraphics.DrawMode, vertSource: String, fragSource: String): URenderPipeline.Builder =
         URenderPipeline.builderWithLegacyShader(id, drawMode, penToolVertexFormat, vertSource, fragSource)
-
-    override fun renderToTexture(width: Int, height: Int, block: (UMatrixStack) -> Unit): GpuTexture {
-        //#if MC >= 1.21.6
-        //$$ val texture = TemporaryTextureAllocator.TextureAllocation(width, height)
-        //$$ val device = RenderSystem.getDevice()
-        //#if MC >= 26.2
-        //$$ val clearColor = org.joml.Vector4f(0f)
-        //#else
-        //$$ val clearColor = 0
-        //#endif
-        //$$ device.createCommandEncoder().clearColorAndDepthTextures(texture.texture, clearColor, texture.depthTexture, 1.0)
-        //$$ AdvancedDrawContext.drawToTexture(texture, block)
-        //$$ val uGpuTextureView = UGraphics.getPlatformAdapter().textureView(texture.textureView)
-        //$$ return object : GpuTexture by UnownedGpuTextureImpl(GpuTexture.Format.RGBA8, uGpuTextureView) {
-        //$$     override fun close() {
-        //$$         texture.close()
-        //$$     }
-        //$$ }
-        //#else
-        val framebuffer = GlFrameBuffer(width, height)
-        framebuffer.clear()
-        framebuffer.useAsRenderTarget { _, _, _ ->
-            //#if MC == 1.21.5
-            //$$ val mc = MinecraftClient.getInstance() as MinecraftExt
-            //$$ mc.`essential$setFramebufferOverride`(object : Framebuffer(null, true) {
-            //$$     init {
-            //$$         colorAttachment = UGraphics.getPlatformAdapter().texture(framebuffer.texture.uc)
-            //$$         depthAttachment = UGraphics.getPlatformAdapter().texture(framebuffer.depthStencil.uc)
-            //$$     }
-            //$$ })
-            //#endif
-            //#if MC >= 1.17
-            //$$ val guiScale = UResolution.scaleFactor.toFloat()
-            //#if MC >= 1.19.3
-            //$$ val projMatrix = Matrix4f().ortho(0f, width / guiScale, height / guiScale, 0f, 1000f, 3000f)
-            //#else
-            //$$ val projMatrix = Matrix4f.projectionMatrix(0f, width / guiScale, 0f, height / guiScale, 1000f, 3000f)
-            //#endif
-            //#if MC >= 1.21.2
-            //$$ RenderSystem.setProjectionMatrix(projMatrix, ProjectionType.ORTHOGRAPHIC)
-            //#elseif MC >= 1.20
-            //$$ RenderSystem.setProjectionMatrix(projMatrix, VertexSorter.BY_Z)
-            //#else
-            //$$ RenderSystem.setProjectionMatrix(projMatrix)
-            //#endif
-            //$$ val modelViewStack = RenderSystem.getModelViewStack()
-            //#if MC >= 1.20.5
-            //$$ modelViewStack.pushMatrix()
-            //$$ modelViewStack.identity()
-            //$$ modelViewStack.translate(0f, 0f, -2000f)
-            //#else
-            //$$ modelViewStack.push()
-            //$$ modelViewStack.loadIdentity()
-            //$$ modelViewStack.translate(0.0, 0.0, -2000.0)
-            //#endif
-            //#if MC < 1.21.2
-            //$$ RenderSystem.applyModelViewMatrix()
-            //#endif
-            //#else
-            val guiScale = UResolution.scaleFactor
-            GlStateManager.matrixMode(GL11.GL_PROJECTION)
-            GlStateManager.loadIdentity()
-            GlStateManager.ortho(0.0, width / guiScale, height / guiScale, 0.0, 1000.0, 3000.0)
-            GlStateManager.matrixMode(GL11.GL_MODELVIEW)
-            GlStateManager.loadIdentity()
-            GlStateManager.translate(0f, 0f, -2000f)
-            //#endif
-            block(UMatrixStack())
-            //#if MC == 1.21.5
-            //$$ mc.`essential$setFramebufferOverride`(null)
-            //#endif
-
-            //#if MC >= 1.17
-            //#if MC >= 1.20.5
-            //$$ modelViewStack.popMatrix()
-            //#else
-            //$$ modelViewStack.pop()
-            //#endif
-            //#if MC < 1.21.2
-            //$$ RenderSystem.applyModelViewMatrix()
-            //#endif
-            //#endif
-        }
-        return object : GpuTexture by framebuffer.texture {
-            override fun close() {
-                framebuffer.close()
-            }
-        }
-        //#endif
-    }
 
     override val isEssentialContainerPresent: Boolean
         get() = EssentialContainerUtil.isContainerPresent()

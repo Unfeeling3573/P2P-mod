@@ -34,6 +34,10 @@ class Call(
         this.timeout = duration
     }
 
+    fun ignoreUnexpected() = apply {
+        ignoreUnexpectedPackets = true
+    }
+
     fun exponentialBackoff(start: Duration = 2.seconds, max: Duration = 60.seconds, factor: Double = 2.0): CallWithRetry {
         return CallWithRetry(this, ExponentialBackoff(start, max, factor))
     }

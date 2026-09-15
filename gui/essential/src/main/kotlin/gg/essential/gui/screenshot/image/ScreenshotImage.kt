@@ -12,75 +12,45 @@
 package gg.essential.gui.screenshot.image
 
 import gg.essential.elementa.UIComponent
+import gg.essential.elementa.renderer.ElementaExtractor
+import gg.essential.elementa.renderer.ImmediateElementaExtractor
 import gg.essential.gui.elementa.state.v2.State
 import gg.essential.gui.screenshot.providers.RegisteredTexture
-import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
 import gg.essential.universal.render.UGpuSampler
-import gg.essential.universal.render.URenderPipeline
-import gg.essential.universal.shader.BlendState
-import gg.essential.universal.vertex.UBufferBuilder
-import java.awt.Color
+import kotlin.math.roundToInt
 
 open class ScreenshotImage(val texture: State<RegisteredTexture?>) : UIComponent() {
 
+    override fun extractComponent(extractor: ElementaExtractor) {
+        extractor.blit(
+            (getLeft() * extractor.guiScale).roundToInt(),
+            (getTop() * extractor.guiScale).roundToInt(),
+            (getRight() * extractor.guiScale).roundToInt(),
+            (getBottom() * extractor.guiScale).roundToInt(),
+            0f, 0f, 1f, 1f,
+            texture.getUntracked()?.gpuTextureView ?: return,
+            SAMPLER,
+            textureContentImmutable = true,
+            premultipliedAlpha = false,
+            getColor(),
+        )
+    }
+
+    @Deprecated(
+        "`draw`-style rendering is deprecated. Override `extractComponent` instead. Call `extract` to extract this component, its effects, and its children.",
+        replaceWith = ReplaceWith("extract(extractor)")
+    )
     override fun draw(matrixStack: UMatrixStack) {
         beforeDrawCompat(matrixStack)
-        val textureInstance = texture.getUntracked()
-        if (textureInstance != null) {
-            val x = this.getLeft().toDouble()
-            val y = this.getTop().toDouble()
-            val width = this.getWidth().toDouble()
-            val height = this.getHeight().toDouble()
-            val color = this.getColor()
 
-            if (color.alpha == 0) {
-                return super.draw(matrixStack)
-            }
-            matrixStack.push()
-            matrixStack.translate(x, y, 0.0)
-            renderImage(matrixStack, color, width, height)
-            matrixStack.pop()
+        extractComponent(ImmediateElementaExtractor(matrixStack))
 
-        }
-
+        @Suppress("DEPRECATION")
         super.draw(matrixStack)
     }
 
-    fun renderImage(
-        matrixStack: UMatrixStack,
-        color: Color,
-        width: Double,
-        height: Double
-    ) {
-        val textureView = texture.getUntracked()?.gpuTextureView ?: return
-
-        val red = color.red.toFloat() / 255f
-        val green = color.green.toFloat() / 255f
-        val blue = color.blue.toFloat() / 255f
-        val alpha = color.alpha.toFloat() / 255f
-
-        val worldRenderer = UBufferBuilder.create(UGraphics.DrawMode.QUADS, UGraphics.CommonVertexFormats.POSITION_TEXTURE_COLOR)
-        worldRenderer.pos(matrixStack, 0.0, height, 0.0).tex(0.0, 1.0).color(red, green, blue, alpha).endVertex()
-        worldRenderer.pos(matrixStack, width, height, 0.0).tex(1.0, 1.0).color(red, green, blue, alpha)
-            .endVertex()
-        worldRenderer.pos(matrixStack, width, 0.0, 0.0).tex(1.0, 0.0).color(red, green, blue, alpha).endVertex()
-        worldRenderer.pos(matrixStack, 0.0, 0.0, 0.0).tex(0.0, 0.0).color(red, green, blue, alpha).endVertex()
-        worldRenderer.build()?.drawAndClose(PIPELINE) {
-            texture(0, textureView, SAMPLER)
-        }
-
-    }
-
     companion object {
-        private val PIPELINE = URenderPipeline.builderWithDefaultShader(
-            "essential:screenshot_image",
-            UGraphics.DrawMode.QUADS,
-            UGraphics.CommonVertexFormats.POSITION_TEXTURE_COLOR,
-        ).apply {
-            blendState = BlendState.ALPHA
-        }.build()
-
         private val SAMPLER = UGpuSampler(
             UGpuSampler.AddressMode.CLAMP_TO_EDGE,
             UGpuSampler.AddressMode.CLAMP_TO_EDGE,

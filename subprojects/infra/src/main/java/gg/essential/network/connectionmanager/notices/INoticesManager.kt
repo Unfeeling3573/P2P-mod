@@ -17,7 +17,7 @@ interface INoticesManager {
     /** Note: For internal / testing use only. */
     fun populateNotices(notices: Collection<Notice>)
     /** Note: For internal / testing use only. */
-    fun removeNotices(notices: Set<String>)
+    fun removeNotices(notices: Set<String>?)
 
     fun dismissNotice(id: String)
 }

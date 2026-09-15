@@ -18,18 +18,9 @@ import java.nio.file.Path
 @AccessedViaReflection("Lwjgl3Loader")
 @Suppress("unused")
 object Bootstrap {
-
-    /**
-     * Set to true when the current GL context supports GL3
-     * and false when it is based on GL2
-     */
-    lateinit var gl3: Lazy<Boolean>
-
     @AccessedViaReflection("Lwjgl3Loader")
     @JvmStatic
-    fun init(nativesDir: Path, gl3: Lazy<Boolean>) {
-        this.gl3 = gl3
-
+    fun init(nativesDir: Path) {
         // We need LWJGL to extract its natives into a dedicated directory because any one native file can only be
         // loaded by one class loader.
         // By choosing a dedicated directory, we effectively also make dedicated native files.
