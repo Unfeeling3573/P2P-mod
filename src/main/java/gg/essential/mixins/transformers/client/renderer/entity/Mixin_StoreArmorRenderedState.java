@@ -69,7 +69,13 @@ public class Mixin_StoreArmorRenderedState {
         cState.setSuppressedArmor(suppressedArmor.get());
     }
 
+    // Neoforge, in 1.21.1 only, creates an overload function with extra parameters, deprecating the original function we target, which is then never called.
+    // https://github.com/neoforged/NeoForge/commit/b92c510d64ed9506140d74538f4699277e8193bd#diff-0e2da9a67dd6c01e595ab3608d405fcea07417ad0b9f782306e966265bdbe5ebR19
+    //#if NEOFORGE && MC == 1.21.1
+    //$$ @Inject(method = "renderArmorPiece(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/entity/EquipmentSlot;ILnet/minecraft/client/model/HumanoidModel;FFFFFF)V", at = @At(value = "HEAD", shift = At.Shift.AFTER))
+    //#else
     @Inject(method = "renderArmorLayer", at = @At(value = "HEAD", shift = At.Shift.AFTER))
+    //#endif
     private void essential$markRenderingNotSuppressed(
         CallbackInfo info,
         //#if MC>=11200

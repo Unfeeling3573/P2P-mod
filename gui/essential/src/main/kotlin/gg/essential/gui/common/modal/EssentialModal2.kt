@@ -226,7 +226,7 @@ abstract class EssentialModal2(
                     .hoverColor(EssentialPalette.SCROLLBAR)
             )
         }
-        scroller.setVerticalScrollBarComponent(scrollbar)
+        scroller.setVerticalScrollBarComponent(scrollbar, hideWhenUseless = true)
     }
 
     /** For the action buttons of your modal. See [primaryButton], [cancelButton] & [primaryAndCancelButtons]. */

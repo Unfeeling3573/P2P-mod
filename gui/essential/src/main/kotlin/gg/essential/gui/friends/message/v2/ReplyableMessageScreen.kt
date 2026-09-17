@@ -233,12 +233,14 @@ class ReplyableMessageScreen(
         // Could be made into a more generic solution, but to do the same trick for the opposite side,
         // one must have the actual max offset of the scroller, which isn't accessible and duplicating the calculation code seems like a bad idea.
         val percentState = mutableStateOf(0f)
+        val hidden = mutableStateOf(true)
 
-        scroller.addScrollAdjustEvent(false) { _, _ ->
+        scroller.addScrollAdjustEvent(false) { _, percentageOfParent ->
             percentState.set(1 - (scroller.verticalOffset / 100).coerceIn(0f, 1f))
+            hidden.set(percentageOfParent == 1f)
         }
 
-        scroller.createGradient(false, 30.pixels, percentState = percentState, heightState = scroller.getHeightState())
+        scroller.createGradient(false, 30.pixels, percentState = percentState, heightState = scroller.getHeightState(), hidden = hidden)
 
         messageListState.onSetValue(this) { _ ->
             content.children.sortWith(contentSortComparator)

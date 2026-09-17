@@ -352,14 +352,38 @@ object ModLoaderUtil {
      * This method is not safe to call in early init on legacy forge.
      * Test usage thoroughly.
      */
-    fun getModVersion(modId: String): String? {
+    fun getModVersion(modId: String): ModVersion? {
         //#if FABRIC
-        //$$ return FabricLoader.getInstance().getModContainer(modId).orElse(null)?.metadata?.version?.toString()
+        //$$ return FabricLoader.getInstance().getModContainer(modId).orElse(null)?.metadata?.version?.let(::ModVersion)
         //#elseif MC>=11400
-        //$$ return LoadingModList.get().mods.find { it.modId == modId }?.version?.toString()
+        //$$ return LoadingModList.get().mods.find { it.modId == modId }?.version?.let(::ModVersion)
         //#else
-        return Loader.instance().indexedModList[modId]?.version
+        return Loader.instance().indexedModList[modId]?.version?.let(::ModVersion)
         //#endif
     }
 
+    class ModVersion(
+        //#if FABRIC
+        //$$ val native: net.fabricmc.loader.api.Version,
+        //#elseif MC >= 1.14
+        //$$ val native: org.apache.maven.artifact.versioning.ArtifactVersion,
+        //#else
+        val native: String,
+        //#endif
+    ) {
+        override fun toString(): String = native
+            //#if MC >= 1.14
+            //$$ .toString()
+            //#endif
+
+        //#if MC >= 26.2
+        //$$ fun compareTo(other: String): Int {
+            //#if FABRIC
+            //$$ return native.compareTo(net.fabricmc.loader.api.Version.parse(other))
+            //#else
+            //$$ TODO
+            //#endif
+        //$$ }
+        //#endif
+    }
 }

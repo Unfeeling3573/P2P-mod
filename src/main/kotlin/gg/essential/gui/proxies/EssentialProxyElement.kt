@@ -25,6 +25,7 @@ import gg.essential.gui.util.addTag
 import gg.essential.gui.util.getTag
 import gg.essential.gui.util.hoveredStateV2
 import gg.essential.gui.util.isInComponentTree
+import gg.essential.gui.util.removeTag
 import gg.essential.universal.UGraphics
 import gg.essential.universal.UMatrixStack
 import gg.essential.util.UDrawContext
@@ -83,10 +84,6 @@ abstract class EssentialProxyElement<T : UIComponent>(
     val essentialComponent: T? get() = essentialComponentState.getUntracked()
 
     fun acceptNewEssentialContainer(container: UIComponent, mountingControl: MutableState<State<Boolean>>) {
-        // reset these values
-        proxyInControl = false
-        positionStateSetByEssential = null
-
         // new component container
         essentialContainer = container
         essentialContainerMountingState = mountingControl
@@ -325,8 +322,10 @@ abstract class EssentialProxyElement<T : UIComponent>(
     private fun T.applyPositionStateFromProxy(){
 
         // test if we have already modified this component before, as the components may change depending on the layout
-        if (getTag<ModifiedConstraintsTag>() != null) return
-        addTag(ModifiedConstraintsTag)
+        val tag = getTag<ModifiedConstraintsTag>()
+        if (tag?.proxy == this@EssentialProxyElement) return
+        tag?.let { removeTag(it) }
+        addTag(ModifiedConstraintsTag(this@EssentialProxyElement))
 
         isFloating = true // ensure that component is not constrained by the parent
 
@@ -403,7 +402,7 @@ abstract class EssentialProxyElement<T : UIComponent>(
 
     }
 
-    private object ModifiedConstraintsTag : Tag
+    private class ModifiedConstraintsTag(val proxy: EssentialProxyElement<*>) : Tag
 
     companion object {
 

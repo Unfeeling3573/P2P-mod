@@ -507,7 +507,8 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
     override val irisReversesZ: Boolean
         //#if MC >= 26.2
         //$$ get() {
-        //$$     if (ModLoaderUtil.isModLoaded("iris")) {
+        //$$     val irisVersion = ModLoaderUtil.getModVersion("iris")
+        //$$     if (irisVersion != null && irisVersion.compareTo("1.11.4") < 0) {
         //$$         // Separate method for class loading reasons
         //$$         fun value() = net.irisshaders.iris.api.v0.IrisApi.getInstance().isShaderPackInUse
         //$$         return value()
@@ -714,9 +715,17 @@ class GuiEssentialPlatformImpl : GuiEssentialPlatform {
         //#else
         .put("Position", DefaultVertexFormats.POSITION_3F)
         .put("Color", DefaultVertexFormats.COLOR_4UB)
+        // Note: These are functionally identical. However, OptiFine 1.17 - 1.21.4 breaks custom VertexFormatElements
+        //       (see `getAttributeIndex` in UniversalCraft), so we must use the builtin ones where available.
+        //#if MC >= 1.16
+        //$$ .put("UV0", DefaultVertexFormats.TEX_2F)
+        //$$ .put("UV1", DefaultVertexFormats.TEX_2S)
+        //$$ .put("UV2", DefaultVertexFormats.TEX_2SB)
+        //#else
         .put("UV0", VertexFormatElement(0, VertexFormatElement.EnumType.FLOAT, VertexFormatElement.EnumUsage.UV, 2))
         .put("UV1", VertexFormatElement(1, VertexFormatElement.EnumType.SHORT, VertexFormatElement.EnumUsage.UV, 2))
         .put("UV2", VertexFormatElement(2, VertexFormatElement.EnumType.SHORT, VertexFormatElement.EnumUsage.UV, 2))
+        //#endif
         //#endif
         .build()
         .let { elements ->

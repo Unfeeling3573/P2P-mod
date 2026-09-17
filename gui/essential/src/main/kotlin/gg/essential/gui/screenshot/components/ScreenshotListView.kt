@@ -133,14 +133,16 @@ abstract class ScreenshotListView(
 
         val percentState = mutableStateOf(0f)
         val heightState = mutableStateOf(0f)
+        val hidden = mutableStateOf(true)
 
         scroller.addScrollAdjustEvent(false) { percent, percentageOfParent ->
             percentState.set(percent)
             heightState.set((1f / percentageOfParent) * scroller.getHeight())
+            hidden.set(percentageOfParent == 1f)
         }
 
-        screenshotScissorBox.createGradient(true, 30.pixels, percentState = percentState, heightState = heightState)
-        screenshotScissorBox.createGradient(false, 30.pixels, percentState = percentState, heightState = heightState)
+        screenshotScissorBox.createGradient(true, 30.pixels, percentState = percentState, heightState = heightState, hidden = hidden)
+        screenshotScissorBox.createGradient(false, 30.pixels, percentState = percentState, heightState = heightState, hidden = hidden)
 
         scroller.addUpdateFunc { _, _ ->
             updateVisibleTextures()

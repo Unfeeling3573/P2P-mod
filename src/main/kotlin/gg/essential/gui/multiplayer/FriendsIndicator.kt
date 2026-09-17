@@ -54,7 +54,12 @@ class FriendsIndicator(val server: ServerData) {
             is PlayerActivity.SPSSession -> activity.host == host
             is PlayerActivity.Multiplayer -> {
                 val knownServers = connectionManager.knownServersManager.state()
-                knownServers.findServerByAddress(activity.serverAddress) == knownServers.findServerByAddress(server.serverIP)
+                val knownServer = knownServers.findServerByAddress(server.serverIP)
+                when {
+                    activity.serverAddress == server.serverIP -> true
+                    knownServer != null && knownServer == knownServers.findServerByAddress(activity.serverAddress) -> true
+                    else -> false
+                }
             }
 
             is PlayerActivity.Offline -> false

@@ -25,6 +25,7 @@ import gg.essential.gui.overlay.Layer
 import gg.essential.handlers.OptionsScreenOverlay
 import gg.essential.handlers.PauseMenuDisplay
 import gg.essential.mixins.transformers.client.gui.GuiScreenAccessor
+import gg.essential.universal.UScreen
 import net.minecraft.client.gui.GuiScreen
 
 class ScreenWithProxiesHandler(
@@ -36,6 +37,7 @@ class ScreenWithProxiesHandler(
 ) {
     private val proxiesById = mutableMapOf<String, EssentialProxyElement<*>>()
     private val elementaById = mutableMapOf<String, Pair<UIComponent, MutableState<State<Boolean>>>>()
+    private var initialLayoutPass = false
     private val access = screen as GuiScreenAccessor
 
     var layer: Layer? = null
@@ -64,7 +66,9 @@ class ScreenWithProxiesHandler(
         val dummyWindow = Window(ElementaVersion.V10)
 
         // Setup initial layout
+        initialLayoutPass = true
         initialLayout(dummyWindow, this)
+        initialLayoutPass = false
         // With all components in place, invalidate any constraints that might have been queried prematurely
         dummyWindow.invalidateCachedConstraints()
         // Apply layout to proxies
@@ -123,10 +127,14 @@ class ScreenWithProxiesHandler(
             if (proxyHandler != null) {
                 val proxy = proxyHandler.proxiesById[id]
                     ?: throw IllegalArgumentException("No proxy found for `$id`. Did you forget to add it to the label-to-id mapping in `ScreenWithProxiesHandler`?")
-                proxyHandler.elementaById[id] = Pair(container, mounted)
+                if (!proxyHandler.initialLayoutPass) {
+                    proxyHandler.elementaById[id] = Pair(container, mounted)
+                }
                 proxy.acceptNewEssentialContainer(container, mounted)
             }
         }
+
+        fun isCurrentScreenFancyMenu() = UScreen.currentScreen?.javaClass?.name?.startsWith("de.keksuccino.fancymenu.") ?: false
 
         // menu components
         // the numbers are hardcoded as they are essential (heh) to allowing fancy menu to consistently identify the buttons

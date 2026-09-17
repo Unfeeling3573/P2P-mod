@@ -156,7 +156,9 @@ abstract class WorldsManager(
             val worldManager = integratedServerWorld()!!
             worldManager.commitLocalGameRuleDiffFile(server.lastPlayed)
             server.setOpenToLanSource { worldManager.localWorldOpen() }
-            server.setWhitelistSource { worldManager.localWorldInfo().invited + USession.active().uuid }
+            if (worldManager.localWorldOpen()) {
+                server.setWhitelistSource { worldManager.localWorldInfo().invited + USession.active().uuid }
+            }
             val settings = worldManager.gameSettings
             server.setDefaultGameModeSource(memo { settings().gameMode.toISM() }.withSetter { update ->
                 scope.launch {
@@ -375,6 +377,7 @@ abstract class WorldsManager(
                 "maxConcurrentGuests" to maxConcurrentGuests,
                 "inviteCount" to worldInfo.invited.size,
                 "shareRP" to worldInfo.shareResourcePack,
+                "resourcePackCount" to worldInfo.resourcePacks.size,
                 "worldNameHash" to Sha256.compute(
                     (USession.activeNow().uuid.toString() + world.localFolder.name).encodeToByteArray()
                 ).hexStr,

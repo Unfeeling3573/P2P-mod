@@ -17,6 +17,7 @@ import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.renderer.entity.layers.LayerArmorBase;
 import net.minecraft.entity.EntityLivingBase;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -28,12 +29,22 @@ import net.minecraft.inventory.EntityEquipmentSlot;
 @Mixin(value = LayerArmorBase.class)
 public class Mixin_DisableArmorRendering {
 
+    //#if NEOFORGE && MC == 1.21.1
+    //$$ // Neoforge, in 1.21.1 only, creates an overload function with extra parameters, deprecating the original function we target, which is then never called.
+    //$$ // https://github.com/neoforged/NeoForge/commit/b92c510d64ed9506140d74538f4699277e8193bd#diff-0e2da9a67dd6c01e595ab3608d405fcea07417ad0b9f782306e966265bdbe5ebR19
+    //$$ @Unique private static final String RENDER_ARMOR = "renderArmorPiece(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/entity/EquipmentSlot;ILnet/minecraft/client/model/HumanoidModel;FFFFFF)V";
+    //#elseif MC >= 1.12
+    @Unique private static final String RENDER_ARMOR = "renderArmorLayer";
+    //#else
+    //$$ @Unique private static final String RENDER_ARMOR =  "renderLayer";
+    //#endif
+
+
+    @Inject(method = RENDER_ARMOR, at = @At(value = "HEAD"), cancellable = true)
     //#if MC>=11200
-    @Inject(method = "renderArmorLayer", at = @At(value = "HEAD"), cancellable = true)
     private void essential$disableArmorRendering(CallbackInfo info, @Local(argsOnly = true) EntityLivingBase entityLivingBaseIn, @Local(argsOnly = true) EntityEquipmentSlot slotIn) {
         int slotIndex = slotIn.getIndex();
     //#else
-    //$$ @Inject(method = "renderLayer", at = @At(value = "HEAD"), cancellable = true)
     //$$ private void essential$disableArmorRendering(EntityLivingBase entityLivingBaseIn, float limbSwing, float limbSwingAmount, float partialTicks, float ageInTicks, float netHeadYaw, float headPitch, float scale, int slotIn, CallbackInfo info) {
     //$$     int slotIndex = slotIn-1;
     //#endif

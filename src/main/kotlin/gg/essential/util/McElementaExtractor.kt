@@ -131,7 +131,6 @@ class McElementaExtractor @JvmOverloads constructor(
         textureContentImmutable: Boolean, premultipliedAlpha: Boolean,
         color: Color,
     ) {
-        if (sampler != UGpuSampler.NEAREST) throw UnsupportedOperationException("Sampler is currently hard-coded")
         //#if MC >= 1.21.6
         //$$ val textureManager = MinecraftClient.getInstance().textureManager
         //$$ val identifier = Identifier.of("essential", "__tmp_texture__")

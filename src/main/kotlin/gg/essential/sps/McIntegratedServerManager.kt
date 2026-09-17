@@ -44,8 +44,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.asDeferred
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
@@ -208,10 +210,15 @@ class McIntegratedServerManager(val server: IntegratedServer) : IntegratedServer
             // The vanilla IntegratedServer.openToLan method is quite thread unsafe, it does non-trivial
             // accesses to both client and server state, and vanilla can also call it from either the client
             // thread (via the Open To LAN button) or the server thread (via /publish command).
+            //
             // We'll schedule our task on the server thread but also make it block the client thread while it's
             // executing, so we won't have to worry about those thread unsafe calls. This does risk dead locking if at
             // the same time a client thread tries to run something on the server in a blocking way, but that seems
             // decently unlikely, and is better than some race-induced state corruption, so we'll take it.
+            //
+            // We must call `shareToLAN` on the server thread to ensure that any methods that submit a task to that
+            // thread will have their tasks run immediately, rather than blocking and waiting (e.g. this is what Open
+            // Parties and Claims does when the command tree is sent to players, see EM-3771).
             val prevJob = openToLanUpdateJob
             openToLanUpdateJob = server.coroutineScope.launch {
                 // Keep updates serialized so we don't end up applying the wrong thing last.
@@ -232,13 +239,24 @@ class McIntegratedServerManager(val server: IntegratedServer) : IntegratedServer
                         }
                     }
 
-                    // Intentionally blocking the server thread, see big comment block above
-                    runBlocking(Dispatchers.Client) {
+                    // Intentionally blocking the client thread, see big comment block above (at the
+                    // server.coroutineScope.launch).
+                    val clientBlocking = Job()
+                    val clientBlock = launch(Dispatchers.Client) {
+                        clientBlocking.complete()
+                        runBlocking(coroutineContext.job) { awaitCancellation() }
+                    }
+                    // Wait until we've taken control over the client thread
+                    runBlocking(coroutineContext.job) { clientBlocking.join() }
+
+                    val port: Int
+                    val maxPlayersValue: Int
+                    try {
                         // We pass `false` for `allowCheats` to ensure that not everybody can enable commands.
                         // This option by default will allow anyone to use operator commands, without being explicitly
                         // added as operator.
                         //#if MC>=11400
-                        //$$ val port = net.minecraft.util.HTTPUtil.getSuitableLanPort()
+                        //$$ port = net.minecraft.util.HTTPUtil.getSuitableLanPort()
                         //$$ val success = server.shareToLAN(
                             //#if MC >= 26.2
                             //$$ MinecraftServer.MultiplayerScope.LAN,
@@ -250,14 +268,19 @@ class McIntegratedServerManager(val server: IntegratedServer) : IntegratedServer
                         //$$     port,
                         //$$ )
                         //$$ if (!success) {
-                        //$$     return@runBlocking
+                        //$$     return@launch
                         //$$ }
                         //#else
                         @Suppress("USELESS_ELVIS") // Forge applies an inappropriate NonNullByDefault
-                        val portStr: String = server.shareToLAN(null, false) ?: return@runBlocking
-                        val port = Integer.parseInt(portStr)
+                        val portStr: String = server.shareToLAN(null, false) ?: return@launch
+                        port = Integer.parseInt(portStr)
                         //#endif
+                        maxPlayersValue = server.maxPlayers
+                    } finally {
+                        clientBlock.cancel()
+                    }
 
+                    withContext(Dispatchers.Client) {
                         // Simple Voice Chat documentation claims that by default it uses port 24454, but it seems they actually
                         // use the integrated server port by default. That's probably a good default as well
                         var voicePort = port
@@ -277,7 +300,7 @@ class McIntegratedServerManager(val server: IntegratedServer) : IntegratedServer
 
                         serverPort.set(port)
                         thirdPartyVoicePort.set(voicePort)
-                        maxPlayers.set(server.maxPlayers)
+                        maxPlayers.set(maxPlayersValue)
                     }
                 } else if (!openToLan && server.public) {
                     server.undoLan(hostUuid)

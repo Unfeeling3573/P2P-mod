@@ -40,7 +40,6 @@ import gg.essential.gui.effects.GradientEffect
 import gg.essential.gui.elementa.lazyPosition
 import gg.essential.gui.elementa.state.v2.*
 import gg.essential.gui.elementa.state.v2.State as StateV2
-import gg.essential.gui.elementa.state.v2.combinators.map
 import gg.essential.gui.elementa.state.v2.utils.toState
 import gg.essential.gui.image.ImageFactory
 import gg.essential.gui.layoutdsl.*
@@ -317,15 +316,17 @@ fun ScrollComponent.getHeightState(): StateV2<Float> {
 
 fun scrollGradient(scroller: ScrollComponent, top: Boolean, height: Float, maxGradient: Int = 204, opposite: Boolean = false) {
     val percentState = mutableStateOf(0f)
+    val hidden = mutableStateOf(true)
 
-    scroller.addScrollAdjustEvent(false) { percent, _ ->
+    scroller.addScrollAdjustEvent(false) { percent, percentageOfParent ->
         percentState.set(if (opposite) percent + 1 else percent)
+        hidden.set(percentageOfParent == 1f)
     }
 
     val heightState = scroller.getHeightState()
     val percentAndHeightState = memo { Pair(percentState(), heightState()) }
 
-    scroller.effect(newGradient(top, height.pixels, maxGradient = maxGradient, percentAndHeightState = percentAndHeightState))
+    scroller.effect(newGradient(top, height.pixels, maxGradient = maxGradient, percentAndHeightState = percentAndHeightState, hidden = hidden))
 }
 
 fun ScrollComponent.createScrollGradient(
@@ -337,13 +338,15 @@ fun ScrollComponent.createScrollGradient(
 ) {
 
     val percentState = mutableStateOf(0f)
+    val hidden = mutableStateOf(true)
 
-    this.addScrollAdjustEvent(false) { percent, _ ->
+    this.addScrollAdjustEvent(false) { percent, percentageOfParent ->
         percentState.set(if (opposite) percent + 1 else percent)
+        hidden.set(percentageOfParent == 1f)
     }
 
     val heightState = getHeightState()
-    createGradient(top, heightSize, color, maxGradient, percentState, heightState)
+    createGradient(top, heightSize, color, maxGradient, percentState, heightState, hidden)
 }
 
 fun <T : UIComponent> T.createGradient(
@@ -352,10 +355,11 @@ fun <T : UIComponent> T.createGradient(
     color: Color = EssentialPalette.GUI_BACKGROUND,
     maxGradient: Int = 204,
     percentState: StateV2<Float>,
-    heightState: StateV2<Float>
+    heightState: StateV2<Float>,
+    hidden: StateV2<Boolean>,
 ) {
     val percentAndHeightState = memo { Pair(percentState(), heightState()) }
-    effect(newGradient(top, heightSize, color, maxGradient, percentAndHeightState))
+    effect(newGradient(top, heightSize, color, maxGradient, percentAndHeightState, hidden))
 }
 
 fun newGradient(
@@ -364,19 +368,22 @@ fun newGradient(
     color: Color = EssentialPalette.GUI_BACKGROUND,
     maxGradient: Int = 204,
     percentAndHeightState: StateV2<Pair<Float, Float>> = stateOf(Pair(if (top) 1f else 0f, 0f)),
+    hidden: StateV2<Boolean> = stateOf(false),
 ): EffectWithFakeComponent {
-    val topColor = percentAndHeightState.map { (percentage, height) ->
-        if (top) {
+    val topColor = memo {
+        val (percentage, height) = percentAndHeightState()
+        if (top && !hidden()) {
             color.withAlpha((percentage * (height).coerceAtLeast(1000f)).toInt().coerceIn(0..maxGradient))
         } else {
             color.withAlpha(0)
         }
     }
-    val bottomColor = percentAndHeightState.map { (percentage, height) ->
-        if (top) {
-            color.withAlpha(0)
-        } else {
+    val bottomColor = memo {
+        val (percentage, height) = percentAndHeightState()
+        if (!top && !hidden()) {
             color.withAlpha(((1 - percentage) * (height).coerceAtLeast(1000f)).toInt().coerceIn(0..maxGradient))
+        } else {
+            color.withAlpha(0)
         }
     }
     return object : EffectWithFakeComponent(GradientEffect(topColor, topColor, bottomColor, bottomColor)) {

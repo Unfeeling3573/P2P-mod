@@ -179,6 +179,7 @@
     "compatibility.vanilla.Mixin_FixSelfieNameplateOrientation_Sneaking",
     "compatibility.vanilla.Mixin_FixThreadUnsafe_NetworkManager_flushOutboundQueue",
     "compatibility.vanilla.Mixin_FixThreadUnsafeOpenScreen_GuiConnecting",
+    "compatibility.vanilla.Mixin_FixWorldLoadingWithResourcePackEnabled",
     "compatibility.vanilla.Mixin_WorkaroundBrokenFramebufferBlitBlending",
     "compatibility.vanilla.Mixin_WorkaroundBrokenVignetteOverlayBlending",
     "compatibility.vanilla.serverdatareset.Mixin_FixServerDataNotReset_OnCancel",

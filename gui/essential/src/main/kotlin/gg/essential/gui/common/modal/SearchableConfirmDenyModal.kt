@@ -128,7 +128,7 @@ open class SearchableConfirmDenyModal(
                 x = SiblingConstraint() boundTo scrollContainer
                 y = 0.pixels boundTo scrollContainer
             }
-            scroller.setVerticalScrollBarComponent(scrollbar)
+            scroller.setVerticalScrollBarComponent(scrollbar, hideWhenUseless = true)
             val isScrollerBiggerThanParent = mutableStateOf(true)
             scroller.addScrollAdjustEvent(false) { _, percentageOfParent ->
                 isScrollerBiggerThanParent.set(percentageOfParent >= 1f)

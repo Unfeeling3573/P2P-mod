@@ -208,6 +208,7 @@ interface GuiEssentialPlatform {
     /**
      * Whether Iris is presently reversing Z.
      * Happens on 26.2+ when a shader pack is active. See the respective paragraph in [usesReversedZ].
+     * With Iris 1.11.14 it stops happening again, at least for GUI rendering, which is all the rendering we care about.
      */
     val irisReversesZ: Boolean
 

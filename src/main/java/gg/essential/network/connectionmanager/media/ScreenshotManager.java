@@ -841,9 +841,13 @@ public class ScreenshotManager implements NetworkedManager, IScreenshotManager {
     }
 
     private void screenshotMessageCallback(ITextComponent component) {
-        if (EssentialConfig.INSTANCE.getEnableVanillaScreenshotMessage()) {
-            UPlayer.sendClientSideMessage(component);
-        }
+        // We must run `sendClientSideMessage` on the client thread, as it may invoke renderer related methods (e.g.
+        // when the user has a custom resource pack installed).
+        ExtensionsKt.getExecutor(Minecraft.getMinecraft()).execute(() -> {
+            if (EssentialConfig.INSTANCE.getEnableVanillaScreenshotMessage()) {
+                UPlayer.sendClientSideMessage(component);
+            }
+        });
     }
 
     private static class PrecomputeTask extends PrioritizedCallable<Void> {

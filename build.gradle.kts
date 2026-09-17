@@ -203,7 +203,10 @@ if (platform.isFabric) {
     // Compile against the oldest fabric-loader version we support, so we don't accidentially use APIs available
     // only in newer versions
     configurations.compileClasspath {
-        resolutionStrategy.force("net.fabricmc:fabric-loader:0.11.0")
+        resolutionStrategy.force("net.fabricmc:fabric-loader:${when {
+            platform.mcVersion >= 26_00_00 -> "0.18.0" // first version to support unobfuscated games
+            else -> "0.11.0"
+        }}")
 
         // Fabric Mixin as of https://github.com/FabricMC/Mixin/pull/226 supports multiple @At and @Slice annotations.
         // This however produces bytecode which is not compatible with old Mixin(Extras) versions, so we must not use

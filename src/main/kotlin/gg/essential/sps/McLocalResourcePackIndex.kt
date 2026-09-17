@@ -15,6 +15,10 @@ import gg.essential.mixins.ext.client.resource.ResourcePackWithPath
 import gg.essential.universal.UMinecraft.getMinecraft
 import java.nio.file.Path
 
+//#if MC >= 26.3
+//$$ import kotlin.jvm.optionals.getOrNull
+//#endif
+
 class McLocalResourcePackIndex(essentialBaseDirectory: Path): LocalResourcePackIndex(essentialBaseDirectory) {
 
     override fun updatePaths(updateMinecraftPackRepo: Boolean) {
@@ -28,7 +32,11 @@ class McLocalResourcePackIndex(essentialBaseDirectory: Path): LocalResourcePackI
                 //$$ if (pack.isHidden) return@mapNotNull null
                 //#endif
 
+                //#if MC >= 26.3
+                //$$ (pack.open().findFirst().getOrNull() as? ResourcePackWithPath)?.`essential$path`?.let { path ->
+                //#else
                 (pack.resourcePack as? ResourcePackWithPath)?.`essential$path`?.let { path ->
+                //#endif
                     //#if MC>=11903
                     //$$ val resourcePackName = pack.displayName.string
                     //#else

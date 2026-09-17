@@ -316,7 +316,7 @@ class WorldHostingModal(
                             .hoverColor(EssentialPalette.SCROLLBAR)
                     )
                 }
-                scrollComponent.setVerticalScrollBarComponent(scrollbar)
+                scrollComponent.setVerticalScrollBarComponent(scrollbar, hideWhenUseless = true)
 
                 scrollGradient(scrollComponent, true, 30f, maxGradient = 153)
                 scrollGradient(scrollComponent, false, 30f, maxGradient = 153)
